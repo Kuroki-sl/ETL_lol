@@ -3,7 +3,6 @@ import json
 from datetime import datetime, timedelta
 from airflow.decorators import dag, task
 from airflow.models import Variable
-from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 
 from etl_lol_utils import (
     DEFAULT_AMERICAS_URL,
@@ -24,11 +23,11 @@ default_args = {
     "on_failure_callback": on_dag_failure_callback,
 }
 
-# Jugadores por defecto si no están definidos en Airflow Variables (Challengers activos LAS)
+#jugadores por defecto si no estan definidos en Airflow Variables (Challengers activos LAS)
 DEFAULT_TARGET_PLAYERS = [
     {"gameName": "Agusbob55555", "tagLine": "Yuyos"},
-    {"gameName": "Kiefer", "tagLine": "LASS"},
-    {"gameName": "punkis123", "tagLine": "LAS"}
+    {"gameName": "Tonoto", "tagLine": "AXEL"},
+    {"gameName": "Unforgiven Teemo", "tagLine": "3243"}
 ]
 
 
@@ -115,21 +114,13 @@ def perfil_jugador_etl():
         )
         return True
 
-    disparar_kpis = TriggerDagRunOperator(
-        task_id="disparar_dag_kpis",
-        trigger_dag_id="dag_03_calculo_kpis",
-        reset_dag_run=True,
-        wait_for_completion=False
-    )
-
-    # Definición del Grafo Acíclico Dirigido
+    #definicion del grafo aciclico dirigido
     val = validar_api_riot()
     ext = extraer_perfiles_raw(val)
     stg = transformar_staging_jugador(ext)
     cal = validar_calidad_jugador(stg)
     dw_load = cargar_dw_dim_jugador_task(cal)
-    audit = registrar_auditoria_task(dw_load)
-    audit >> disparar_kpis
+    registrar_auditoria_task(dw_load)
 
 
 dag_instancia = perfil_jugador_etl()

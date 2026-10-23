@@ -2,7 +2,6 @@ import time
 from datetime import datetime, timedelta
 from airflow.decorators import dag, task
 from airflow.models import Variable
-from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 
 from etl_lol_utils import (
     DEFAULT_AMERICAS_URL,
@@ -109,21 +108,13 @@ def partidas_jugador_etl():
         )
         return True
 
-    disparar_kpis = TriggerDagRunOperator(
-        task_id="disparar_dag_kpis",
-        trigger_dag_id="dag_03_calculo_kpis",
-        reset_dag_run=True,
-        wait_for_completion=False
-    )
-
     # Grafo
     val = validar_api_match()
     ext = extraer_partidas_raw(val)
     stg = transformar_staging_partidas(ext)
     cal = validar_calidad_partidas(stg)
     dw_load = cargar_dw_hechos_y_tiempo_task(cal)
-    audit = registrar_auditoria_task(dw_load)
-    audit >> disparar_kpis
+    registrar_auditoria_task(dw_load)
 
 
 dag_instancia = partidas_jugador_etl()

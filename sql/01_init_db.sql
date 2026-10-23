@@ -1,19 +1,11 @@
--- ============================================================================
--- PROYECTO ETL LEAGUE OF LEGENDS - DDL INICIAL DE BASE DE DATOS
--- INF-522 | Universidad Católica del Maule
--- ============================================================================
 
--- ============================================================================
--- 1. CREACIÓN DE ESQUEMAS OBLIGATORIOS (Rúbrica: raw, staging, dw, mart)
--- ============================================================================
+-- creacion esquemas raw, staging, dw, mart
 CREATE SCHEMA IF NOT EXISTS raw;
 CREATE SCHEMA IF NOT EXISTS staging;
 CREATE SCHEMA IF NOT EXISTS dw;
 CREATE SCHEMA IF NOT EXISTS mart;
 
--- ============================================================================
--- 2. TABLA DE AUDITORÍA Y REGISTRO DE FALLAS (Rúbrica Ítem 5)
--- ============================================================================
+--tabla de auditoria y fallas
 CREATE TABLE IF NOT EXISTS public.etl_audit (
     id_ejecucion SERIAL PRIMARY KEY,
     dag_name VARCHAR(100) NOT NULL,
@@ -27,9 +19,7 @@ CREATE TABLE IF NOT EXISTS public.etl_audit (
     mensaje_error TEXT
 );
 
--- ============================================================================
--- 3. CAPA RAW (Datos crudos tal como llegan de la API + fecha de extracción)
--- ============================================================================
+--RAW
 CREATE TABLE IF NOT EXISTS raw.raw_perfil_jugador (
     id_raw SERIAL PRIMARY KEY,
     riot_id VARCHAR(100) NOT NULL,
@@ -48,9 +38,7 @@ CREATE TABLE IF NOT EXISTS raw.raw_partidas (
     fecha_extraccion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- ============================================================================
--- 4. CAPA STAGING (Datos limpios, tipados y validados previos al DW)
--- ============================================================================
+--STAGING
 CREATE TABLE IF NOT EXISTS staging.stg_jugador (
     puuid VARCHAR(100) PRIMARY KEY,
     game_name VARCHAR(60) NOT NULL,
@@ -89,11 +77,9 @@ CREATE TABLE IF NOT EXISTS staging.stg_partidas (
     PRIMARY KEY (match_id, puuid)
 );
 
--- ============================================================================
--- 5. CAPA DW (Modelo Dimensional Estrella: 2 Dimensiones + 1 Tabla de Hechos)
--- ============================================================================
+--capa DW
 CREATE TABLE IF NOT EXISTS dw.dim_tiempo (
-    id_tiempo INT PRIMARY KEY,            -- Formato YYYYMMDDHH (ej. 2026102218)
+    id_tiempo INT PRIMARY KEY,            -- Formato YYYYMMDDHH
     fecha DATE NOT NULL,
     anio INT NOT NULL,
     mes INT NOT NULL,
@@ -106,7 +92,7 @@ CREATE TABLE IF NOT EXISTS dw.dim_tiempo (
 CREATE TABLE IF NOT EXISTS dw.dim_jugador (
     puuid VARCHAR(100) PRIMARY KEY,
     nombre_completo VARCHAR(85) NOT NULL, -- gameName#tagLine
-    liga VARCHAR(50) NOT NULL,            -- Ej. 'GOLD II' o 'UNRANKED'
+    liga VARCHAR(50) NOT NULL,            -- 'GOLD II' o 'UNRANKED'
     nivel INT NOT NULL,
     lp_actuales INT NOT NULL DEFAULT 0,
     fecha_actualizacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -132,9 +118,7 @@ CREATE TABLE IF NOT EXISTS dw.fact_partidas (
     PRIMARY KEY (match_id, puuid)
 );
 
--- ============================================================================
--- 6. CAPA MART (Tablas de Indicadores de Gestión / KPIs)
--- ============================================================================
+--capa MART (KPIs)
 CREATE TABLE IF NOT EXISTS mart.kpi_01_mejores_campeones (
     puuid VARCHAR(100) NOT NULL,
     nombre_jugador VARCHAR(85) NOT NULL,

@@ -6,17 +6,16 @@ import requests
 import pandas as pd
 from sqlalchemy import create_engine, text
 
-# Configuración de logging
+#logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
-# Configuración regional de endpoints de Riot Games
+#endpoints de Riot Games
 DEFAULT_AMERICAS_URL = "https://americas.api.riotgames.com"
 DEFAULT_LAS_URL = "https://la2.api.riotgames.com"
 
 
-# 1. CONEXIÓN A BASE DE DATOS Y AUDITORÍA
-
+#conexion a DB y auditoria
 def get_db_engine():
     """Retorna una conexión SQLAlchemy a PostgreSQL usando variables de entorno."""
     host = os.environ.get("PGHOST", "localhost")
@@ -78,7 +77,7 @@ def on_dag_failure_callback(context):
     )
 
 
-# 2. CLIENTE HTTP TOLERANTE A FALLAS (Riot Games API)
+#HTTP tolerante a fallas
 
 def get_riot_headers(api_key=None):
     """Retorna las cabeceras requeridas con la API Key."""
@@ -153,7 +152,7 @@ def validar_estado_api(base_url, api_key):
         raise
 
 
-# 3. PIPELINE 1: PERFIL Y CLASIFICACIÓN DE JUGADORES
+#pipeline#1 perfil y clasificacion de jugadores
 
 def extract_perfiles_riot(target_players, api_key, americas_url=DEFAULT_AMERICAS_URL, las_url=DEFAULT_LAS_URL):
     """
@@ -344,7 +343,7 @@ def load_dw_dim_jugador():
     return cargadas
 
 
-# 4. PIPELINE 2: HISTORIAL Y TELEMETRÍA DE PARTIDAS (Match-V5)
+#pipeline#2 historial de partidas (Match-V5)
 
 def extraer_partidas_riot(api_key, puuids=None, count=20, start_time=None, end_time=None,
                           americas_url=DEFAULT_AMERICAS_URL):
@@ -621,7 +620,7 @@ def load_dw_hechos_y_tiempo():
     return cargadas
 
 
-# 5. PIPELINE 3: CÁLCULO DE KPIS EN CAPA MART
+#pipeline#3 KPIs en capa mart
 
 def calcular_kpis_mart(min_partidas_kpi1=1, min_partidas_kpi2=1):
     """
