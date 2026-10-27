@@ -13,5 +13,6 @@ RUN pip install --no-cache-dir \
     pandas \
     sqlalchemy \
     psycopg2-binary \
+    tzdata \
     openpyxl \
     matplotlib

@@ -146,16 +146,18 @@ Cada DAG mantiene total independencia y tolerancia a fallas:
 ## Arquitectura del Pipeline y Capas de Datos
 
 * **Capa `raw`:** Ingesta fiel de los payloads JSON de Riot Games junto con timestamp de extracción (`raw_perfil_jugador`, `raw_partidas`).
-* **Capa `staging`:** Limpieza, tipado fuerte, filtrado de partidas *remake* (< 5 min), cálculo de métricas básicas y normalización *snake_case* (`stg_jugador`, `stg_partidas`).
+* **Capa `staging`:** Limpieza, tipado fuerte, filtro de clasificatorias Solo/Duo (`queue_id=420`), descarte de *remakes* (< 5 min), hora local `America/Santiago`, parche del juego y una fila por participante (`match_id`, `puuid`).
 * **Capa `dw` (Modelo Estrella):** 
-  * Dimensiones: `dw.dim_jugador`, `dw.dim_tiempo` (bloques horarios de 4 horas).
-  * Tabla de Hechos: `dw.fact_partidas` (idempotencia garantizada con `ON CONFLICT DO UPDATE`).
+  * Dimensiones: `dw.dim_jugador`, `dw.dim_tiempo` (fecha y hora local de Chile).
+  * Tabla de Hechos: `dw.fact_partidas`, con una fila por jugador y partida, incluyendo cola y parche. El payload de cada partida se guarda una vez; la carga deduplica por `(match_id, puuid)`.
 * **Capa `mart` (Indicadores de Gestión / KPIs):**
-  1. `mart.kpi_01_mejores_campeones`: Winrate y KDA por jugador, campeón y rol (meta competitiva).
-  2. `mart.kpi_02_winrate_horario`: Eficiencia competitiva por bloque horario y recomendación de gestión.
-  3. `mart.kpi_03_calificacion_rol`: Nota ponderada en escala chilena (1.0 a 7.0) por rol.
-  4. `mart.kpi_04_control_actividad_diaria`: Volumen diario de horas/partidas y alerta de fatiga/sobrecarga ($\ge 7$ partidas).
-  5. `mart.kpi_05_tierlist_meta_vs_otp`: Clasificación de campeones (*Meta Dominante* vs. *OTP / Nicho*).
+  1. `mart.kpi_01_mejores_campeones`: winrate, KDA agregado y puntaje compuesto por jugador/campeón/rol. Requiere 10 partidas para puntuar; menos se marca como muestra insuficiente. El puntaje pondera winrate (60%), KDA normalizado (25%) y volumen hasta 50 partidas (15%).
+  2. `mart.kpi_02_winrate_horario`: winrate por bloque local de 4 horas, comparado con el winrate global del jugador. Con menos de 10 partidas por bloque se muestra como muestra insuficiente y no se recomienda esa franja.
+  3. `mart.kpi_03_calificacion_rol`: desde 10 partidas, calcula dos factores según el rol, limita cada factor al rango 0–1 y promedia ambos para obtener `1 + 6 × promedio` (escala 1,0–7,0). TOP usa daño/minuto (600) y daño a torres/minuto (150); JUNGLE usa KDA agregado (4) y dragones/barones del jugador por partida (1); MIDDLE usa KDA (4) y daño/minuto (700); ADC usa daño/minuto (750) y oro/minuto (450); SUPPORT usa KDA (4) y visión/minuto (2). `SUPERA META` significa nota mayor que 5,0. Son referencias definidas para este proyecto, no benchmarks oficiales de Riot.
+  4. `mart.kpi_04_control_actividad_diaria`: partidas y horas jugadas por fecha local; alerta desde 7 partidas. El winrate diario solo se muestra desde 10 partidas y la alerta no diagnostica fatiga.
+  5. `mart.kpi_05_tierlist_meta_vs_otp`: meta observado por campeón/rol/parche en las partidas recolectadas, considerando a todos sus participantes. Requiere 10 participaciones para clasificar; no identifica OTP ni representa automáticamente todo LAS.
+
+El KDA por partida se calcula como `(asesinatos + asistencias) / MAX(muertes, 1)`, por lo que una partida sin muertes usa 1 como divisor y no recibe una penalización. Para comparar un período se usa `(suma de asesinatos + suma de asistencias) / MAX(suma de muertes, 1)`, sin promediar los KDA individuales. Los mínimos de 10 partidas son guardas operativas para evitar etiquetar muestras muy pequeñas; no equivalen a una prueba de significancia estadística. En KPI 3, la métrica de jungla usa dragones/barones asegurados por partida como aproximación individual, no los súbditos neutrales ni todos los objetivos del equipo.
 * **Trazabilidad y Auditoría:** `public.etl_audit` registra DAG, run_id, fecha, filas leídas, filas cargadas, porcentaje de nulos/inválidos, duración y detalle de excepciones (`on_failure_callback`).
 
 ---

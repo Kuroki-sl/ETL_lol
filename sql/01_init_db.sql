@@ -37,6 +37,12 @@ CREATE TABLE IF NOT EXISTS raw.raw_partidas (
     payload_match JSONB NOT NULL,
     fecha_extraccion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+DELETE FROM raw.raw_partidas repetida
+USING raw.raw_partidas conservada
+WHERE repetida.match_id = conservada.match_id
+  AND repetida.id_raw < conservada.id_raw;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_raw_partidas_match_id
+    ON raw.raw_partidas (match_id);
 
 --STAGING
 CREATE TABLE IF NOT EXISTS staging.stg_jugador (
@@ -60,16 +66,17 @@ CREATE TABLE IF NOT EXISTS staging.stg_partidas (
     hora_del_dia INT NOT NULL,
     bloque_horario VARCHAR(20) NOT NULL,
     queue_id INT NOT NULL,
+    parche VARCHAR(20) NOT NULL,
     campeon VARCHAR(50) NOT NULL,
     rol VARCHAR(20) NOT NULL,             -- TOP, JUNGLE, MIDDLE, BOTTOM, UTILITY
     asesinatos INT NOT NULL,
     muertes INT NOT NULL,
     asistencias INT NOT NULL,
-    kda NUMERIC(6,2) NOT NULL,
+    kda NUMERIC(6,2),
     oro_ganado INT NOT NULL,
     dano_campeones INT NOT NULL,
     dano_torres INT NOT NULL,
-    objetivos_neutrales INT NOT NULL,
+    objetivos_neutrales INT NOT NULL,       -- dragones/barones asegurados por el jugador
     vision INT NOT NULL,
     duracion_min NUMERIC(6,2) NOT NULL,
     victoria BOOLEAN NOT NULL,
@@ -102,16 +109,18 @@ CREATE TABLE IF NOT EXISTS dw.fact_partidas (
     match_id VARCHAR(50) NOT NULL,
     puuid VARCHAR(100) NOT NULL REFERENCES dw.dim_jugador(puuid),
     id_tiempo INT NOT NULL REFERENCES dw.dim_tiempo(id_tiempo),
+    queue_id INT NOT NULL,                 -- 420 = Ranked Solo/Duo
+    parche VARCHAR(20) NOT NULL,
     campeon VARCHAR(50) NOT NULL,
     rol VARCHAR(20) NOT NULL,
     asesinatos INT NOT NULL,
     muertes INT NOT NULL,
     asistencias INT NOT NULL,
-    kda NUMERIC(6,2) NOT NULL,
+    kda NUMERIC(6,2),
     oro INT NOT NULL,
     dano_campeones INT NOT NULL,
     dano_torres INT NOT NULL,
-    objetivos_neutrales INT NOT NULL,
+    objetivos_neutrales INT NOT NULL,       -- dragones/barones asegurados por el jugador
     vision INT NOT NULL,
     duracion_min NUMERIC(6,2) NOT NULL,
     victoria BOOLEAN NOT NULL,
@@ -127,8 +136,10 @@ CREATE TABLE IF NOT EXISTS mart.kpi_01_mejores_campeones (
     partidas_jugadas INT NOT NULL,
     victorias INT NOT NULL,
     winrate_pct NUMERIC(5,2) NOT NULL,
-    kda_promedio NUMERIC(6,2) NOT NULL,
-    cumple_meta BOOLEAN NOT NULL,
+    kda_promedio NUMERIC(6,2),
+    puntaje_compuesto NUMERIC(5,2),
+    estado_muestra VARCHAR(30) NOT NULL DEFAULT 'MUESTRA INSUFICIENTE',
+    cumple_meta BOOLEAN,
     fecha_calculo TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (puuid, campeon, rol)
 );
@@ -153,7 +164,7 @@ CREATE TABLE IF NOT EXISTS mart.kpi_03_calificacion_rol (
     dpm_promedio NUMERIC(8,2) NOT NULL,
     gpm_promedio NUMERIC(8,2) NOT NULL,
     vision_min_promedio NUMERIC(6,2) NOT NULL,
-    nota_escala_1_a_7 NUMERIC(3,1) NOT NULL,
+    nota_escala_1_a_7 NUMERIC(3,1),
     estado_rendimiento VARCHAR(30) NOT NULL,
     fecha_calculo TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (puuid, rol)
@@ -165,7 +176,7 @@ CREATE TABLE IF NOT EXISTS mart.kpi_04_control_actividad_diaria (
     fecha DATE NOT NULL,
     partidas_en_el_dia INT NOT NULL,
     horas_jugadas_dia NUMERIC(5,2) NOT NULL,
-    winrate_del_dia NUMERIC(5,2) NOT NULL,
+    winrate_del_dia NUMERIC(5,2),
     alerta_sobrecarga BOOLEAN NOT NULL,
     fecha_calculo TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (puuid, fecha)
@@ -174,10 +185,11 @@ CREATE TABLE IF NOT EXISTS mart.kpi_04_control_actividad_diaria (
 CREATE TABLE IF NOT EXISTS mart.kpi_05_tierlist_meta_vs_otp (
     campeon VARCHAR(50) NOT NULL,
     rol VARCHAR(20) NOT NULL,
+    parche VARCHAR(20) NOT NULL,
     partidas_totales INT NOT NULL,
     winrate_global_pct NUMERIC(5,2) NOT NULL,
-    kda_global NUMERIC(6,2) NOT NULL,
+    kda_global NUMERIC(6,2),
     clasificacion_tier VARCHAR(40) NOT NULL,
     fecha_calculo TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (campeon, rol)
+    PRIMARY KEY (campeon, rol, parche)
 );

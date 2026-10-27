@@ -42,7 +42,7 @@ def calculo_kpis_etl():
 
     @task
     def calcular_kpis_mart_task(total_hechos: int):
-        """Ejecuta los 5 cálculos SQL de KPIs con inserción/actualización idempotente."""
+        """Reconstruye los 5 KPIs a partir de los hechos válidos del DW."""
         t_inicio = time.time()
         if total_hechos == 0:
             return {
@@ -50,7 +50,12 @@ def calculo_kpis_etl():
                 "filas_kpis": 0,
                 "t_inicio": t_inicio
             }
-        filas_actualizadas = calcular_kpis_mart(min_partidas_kpi1=1, min_partidas_kpi2=1)
+        filas_actualizadas = calcular_kpis_mart(
+            min_partidas_kpi1=10,
+            min_partidas_kpi2=10,
+            min_partidas_kpi3=10,
+            min_partidas_kpi5=10,
+        )
         return {
             "total_hechos": total_hechos,
             "filas_kpis": filas_actualizadas,
