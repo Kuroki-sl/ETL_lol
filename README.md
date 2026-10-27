@@ -88,25 +88,28 @@ Detén los servicios conservando los datos con `docker compose down`. Para borra
 
 ### Compartir la base de datos entre integrantes
 
-El volumen de Docker vive en un solo computador y no se sincroniza con Git. Para trabajar los tres con la misma captura, una persona ejecuta el ETL y comparte un respaldo de `gestion_lol` por la carpeta común de Drive/OneDrive. Cada integrante lo restaura en su propio contenedor `lol-postgres`.
+El volumen de Docker vive en un solo computador y no se sincroniza con Git. Para trabajar los tres con la misma captura usando **Google Drive desde la web**, una persona ejecuta el ETL y sube un respaldo de `gestion_lol`; cada integrante descarga ese archivo y lo restaura en su propio contenedor `lol-postgres`. No hace falta instalar Drive para escritorio.
 
 1. En el computador que tiene los datos, levanta PostgreSQL si no está activo y crea el respaldo:
    ```powershell
    docker compose up -d lol-postgres
-   .\scripts\Backup-GestionLol.ps1 -BackupDirectory "C:\ruta\a\carpeta_compartida"
+   .\scripts\Backup-GestionLol.ps1
    ```
-   El script crea un archivo fechado `gestion_lol_*.dump` en esa carpeta. También puedes omitir `-BackupDirectory`; por defecto lo deja en `backups/`, que está excluida de Git.
-2. Comparte ese archivo con los otros integrantes.
-3. Cada integrante debe tener el repositorio y sus contenedores, copiar el respaldo a una carpeta local y ejecutar:
+   El script imprime la ruta de un archivo fechado, por ejemplo `backups\gestion_lol_20261027_153000_123.dump`. Ese archivo `.dump` contiene la estructura y los datos de `gestion_lol`.
+2. Abre [Google Drive](https://drive.google.com) en el navegador, entra en la carpeta compartida, selecciona **Nuevo → Subir archivo** y elige el `.dump` creado. Espera a que termine la carga y comparte el archivo/carpeta con los otros integrantes. No subas `.env` ni claves de Riot.
+3. Cada compañero descarga ese `.dump` desde Drive web a su computador. Debe tener el repositorio actualizado (`git pull`, si ya lo clonó) y Docker Desktop iniciado. Desde la carpeta del proyecto ejecuta:
    ```powershell
    docker compose up -d lol-postgres
-   .\scripts\Restore-GestionLol.ps1 -DumpPath "C:\ruta\al\gestion_lol_20261026_123456_789.dump"
+   .\scripts\Restore-GestionLol.ps1 -DumpPath "C:\ruta\local\gestion_lol_20261027_153000_123.dump"
    ```
-   Cambia el ejemplo por el nombre exacto del archivo recibido. El script pide escribir `REEMPLAZAR` porque la restauración sustituye los datos analíticos locales de `gestion_lol` por los del archivo. No ejecutar mientras haya un DAG cargando datos.
+   Cambia el ejemplo por la ruta y el nombre exactos del archivo descargado. El script pide escribir `REEMPLAZAR` porque la restauración sustituye la base local `gestion_lol` por la del respaldo. No ejecutar mientras haya un DAG cargando datos.
+4. El compañero ya puede consultar la captura y seguir trabajando con esos datos. Si ejecuta nuevos DAGs y agrega partidas, genera otro respaldo con `Backup-GestionLol.ps1` y lo sube a Drive web. Los demás descargan ese nuevo archivo y repiten la restauración para actualizar su copia.
 
-El respaldo contiene solo `gestion_lol` (datos y estructura). No incluye la base interna de Airflow, donde se guardan sus variables. Cada integrante mantiene su propio `.env` y su propia clave de Riot; quien solo vaya a consultar los datos no necesita una clave. No subas archivos `.dump` ni `.env` al repositorio.
+Conviene que una persona sea responsable de publicar el respaldo vigente. Cada `.dump` es una copia completa: no se combinan dos respaldos y restaurar uno reemplaza la base local de quien lo restaura. Así se evita que el equipo trabaje sobre copias distintas y después intente fusionarlas.
 
-Este método comparte una captura, no una base sincronizada en vivo. Cuando se agreguen nuevas partidas, se genera y distribuye un respaldo nuevo.
+El respaldo contiene solo `gestion_lol` (estructura y datos). No incluye la base interna de Airflow ni sus variables. Cada integrante mantiene su propio `.env` y su propia clave de Riot; quien solo vaya a consultar los datos no necesita una clave. No subas archivos `.dump` ni `.env` al repositorio.
+
+Este método comparte capturas de la base, no una base sincronizada en vivo: los cambios de un integrante no aparecen en las copias de los demás hasta que publica y distribuye un respaldo nuevo.
 
 ### 3. Configurar Variables en la UI de Airflow (Admin -> Variables)
 Para cumplir con los estándares de seguridad y flexibilidad de la rúbrica:
