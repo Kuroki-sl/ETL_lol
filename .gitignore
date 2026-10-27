@@ -11,6 +11,10 @@ airflow.db
 airflow-webserver.pid
 standalone_admin_password.txt
 
+# RESPALDOS DE DATOS: compartir por Drive/OneDrive, no subir al repositorio
+/backups/
+*.dump
+
 # CACHE DE PYTHON Y ENTORNOS VIRTUALES
 __pycache__/
 *.py[cod]

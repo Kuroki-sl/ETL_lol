@@ -14,6 +14,9 @@ proyecto_etl_lol/
 │   └── dag_03_calculo_kpis.py      # DAG 3: Cálculo SQL de los 5 Indicadores en capa mart
 ├── sql/
 │   └── 01_init_db.sql              # DDL (Esquemas raw, staging, dw, mart y tabla public.etl_audit)
+├── scripts/
+│   ├── Backup-GestionLol.ps1        # Exporta solo la base de datos del ETL
+│   └── Restore-GestionLol.ps1       # Restaura un respaldo compartido
 ├── .env.example                    # Plantilla de variables de entorno (sin secretos)
 ├── .gitignore                      # Exclusión de archivos sensibles (.env), logs y caché
 ├── Dockerfile                      # Imagen Airflow extendida con librerías Python requeridas
@@ -25,32 +28,38 @@ proyecto_etl_lol/
 
 ## Guía de Reproducción Paso a Paso
 
-### 1. Inicializar la Base de Datos en PostgreSQL
-1. Abre DBeaver, pgAdmin o tu cliente PostgreSQL conectado a `localhost:5432`.
-2. Crea una base de datos llamada `gestion_lol` (o la que configures en tu archivo `.env`).
-3. Ejecuta el script DDL completo:
-   ```text
-   sql/01_init_db.sql
+### 1. Configurar Variables de Entorno
+1. Copia el archivo `.env.example` y renómbralo a `.env`.
+2. Cambia `PGPASSWORD` y `RIOT_API_KEY` en `.env`. PostgreSQL se ejecutará en un contenedor propio; no necesitas instalar PostgreSQL ni DBeaver en Windows.
+3. Genera una clave Fernet para Airflow en PowerShell, desde la carpeta del proyecto, y guárdala en `.env`:
+   ```powershell
+   $bytes = [byte[]]::new(32)
+   [System.Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
+   $key = [Convert]::ToBase64String($bytes).Replace('+','-').Replace('/','_')
+   $envPath = (Resolve-Path .env).Path
+   $envText = [System.IO.File]::ReadAllText($envPath)
+   $envText = [regex]::Replace($envText, '(?m)^FERNET_KEY=.*$', "FERNET_KEY=$key")
+   [System.IO.File]::WriteAllText($envPath, $envText, [System.Text.UTF8Encoding]::new($false))
    ```
-4. Comprueba que se crearon los esquemas `raw`, `staging`, `dw`, `mart` y la tabla `public.etl_audit`.
 
-### 2. Configurar Variables de Entorno
-1. Copia el archivo `.env.example` y renómbralo a `.env`:
-2. Completa `.env` con tus credenciales locales:
+La configuración esperada queda así:
    ```env
    AIRFLOW_UID=50000
-   PGHOST=host.docker.internal
+   PGHOST=lol-postgres
    PGPORT=5432
    PGDATABASE=gestion_lol
    PGUSER=postgres
-   PGPASSWORD=tu_contrasena_postgres
+   PGPASSWORD=una_contrasena_local
+   FERNET_KEY=clave_generada_en_el_paso_anterior
    RIOT_API_KEY=RGAPI-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
    RIOT_API_BASE_AMERICAS=https://americas.api.riotgames.com
    RIOT_API_BASE_LAS=https://la2.api.riotgames.com
    ```
 
-### 3. Levantar Apache Airflow con Docker
-Desde una terminal PowerShell en la carpeta `proyecto_etl_lol`:
+Al iniciar por primera vez, el contenedor `lol-postgres` crea `gestion_lol` y ejecuta `sql/01_init_db.sql` automáticamente.
+
+### 2. Levantar Apache Airflow con Docker
+Desde PowerShell en la carpeta del proyecto:
 
 ```powershell
 # 1. Construir la imagen con las dependencias Python
@@ -70,7 +79,36 @@ Accede a la interfaz web de Airflow:
 **URL:** [http://localhost:8080](http://localhost:8080)  
 **Usuario:** `airflow` | **Contraseña:** `airflow`
 
-### 4. Configurar Variables en la UI de Airflow (Admin -> Variables)
+Para abrir una consola SQL dentro de PostgreSQL:
+```powershell
+docker compose exec lol-postgres psql -U postgres -d gestion_lol
+```
+
+Detén los servicios conservando los datos con `docker compose down`. Para borrar también las bases de datos almacenadas por Docker, usa `docker compose down -v`.
+
+### Compartir la base de datos entre integrantes
+
+El volumen de Docker vive en un solo computador y no se sincroniza con Git. Para trabajar los tres con la misma captura, una persona ejecuta el ETL y comparte un respaldo de `gestion_lol` por la carpeta común de Drive/OneDrive. Cada integrante lo restaura en su propio contenedor `lol-postgres`.
+
+1. En el computador que tiene los datos, levanta PostgreSQL si no está activo y crea el respaldo:
+   ```powershell
+   docker compose up -d lol-postgres
+   .\scripts\Backup-GestionLol.ps1 -BackupDirectory "C:\ruta\a\carpeta_compartida"
+   ```
+   El script crea un archivo fechado `gestion_lol_*.dump` en esa carpeta. También puedes omitir `-BackupDirectory`; por defecto lo deja en `backups/`, que está excluida de Git.
+2. Comparte ese archivo con los otros integrantes.
+3. Cada integrante debe tener el repositorio y sus contenedores, copiar el respaldo a una carpeta local y ejecutar:
+   ```powershell
+   docker compose up -d lol-postgres
+   .\scripts\Restore-GestionLol.ps1 -DumpPath "C:\ruta\al\gestion_lol_20261026_123456_789.dump"
+   ```
+   Cambia el ejemplo por el nombre exacto del archivo recibido. El script pide escribir `REEMPLAZAR` porque la restauración sustituye los datos analíticos locales de `gestion_lol` por los del archivo. No ejecutar mientras haya un DAG cargando datos.
+
+El respaldo contiene solo `gestion_lol` (datos y estructura). No incluye la base interna de Airflow, donde se guardan sus variables. Cada integrante mantiene su propio `.env` y su propia clave de Riot; quien solo vaya a consultar los datos no necesita una clave. No subas archivos `.dump` ni `.env` al repositorio.
+
+Este método comparte una captura, no una base sincronizada en vivo. Cuando se agreguen nuevas partidas, se genera y distribuye un respaldo nuevo.
+
+### 3. Configurar Variables en la UI de Airflow (Admin -> Variables)
 Para cumplir con los estándares de seguridad y flexibilidad de la rúbrica:
 * `riot_api_key`: Tu clave activa de Riot Games (`RGAPI-...`).
 * `riot_api_base_americas`: `https://americas.api.riotgames.com`

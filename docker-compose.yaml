@@ -65,7 +65,7 @@ x-airflow-common:
     AIRFLOW__CORE__FERNET_KEY: ${FERNET_KEY}
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
-    PGHOST: ${PGHOST:-host.docker.internal}
+    PGHOST: ${PGHOST:-lol-postgres}
     PGPORT: ${PGPORT:-5432}
     PGDATABASE: ${PGDATABASE:-gestion_lol}
     PGUSER: ${PGUSER:-postgres}
@@ -96,6 +96,8 @@ x-airflow-common:
       condition: service_healthy
     postgres:
       condition: service_healthy
+    lol-postgres:
+      condition: service_healthy
 
 services:
   postgres:
@@ -111,6 +113,24 @@ services:
       interval: 10s
       retries: 5
       start_period: 5s
+    restart: always
+
+  # PostgreSQL for the LoL ETL data. Kept separate from Airflow's metadata DB.
+  lol-postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${PGDATABASE:-gestion_lol}
+      POSTGRES_USER: ${PGUSER:-postgres}
+      POSTGRES_PASSWORD: ${PGPASSWORD:?Set PGPASSWORD in .env}
+    volumes:
+      - lol-postgres-db-volume:/var/lib/postgresql/data
+      - ./sql/01_init_db.sql:/docker-entrypoint-initdb.d/01_init_db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     restart: always
 
   redis:
@@ -343,3 +363,4 @@ services:
 
 volumes:
   postgres-db-volume:
+  lol-postgres-db-volume:
