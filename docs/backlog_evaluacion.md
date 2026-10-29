@@ -1,133 +1,134 @@
 # Backlog de la Evaluación 2 — ETL de League of Legends
 
-**Estado revisado:** 28-10-2026. Basado en el repositorio actual y en la pauta E2-INF-522.
+**Revisado:** 28-10-2026. Basado en el repositorio y en la pauta E2-INF-522.
 
-**Entrega indicada en la pauta:** informe y solución ETL el 01-11-2026; presentación el 05-11-2026.
+**Entrega:** informe y solución ETL el 01-11-2026; presentación el 05-11-2026.
 
-## Cómo leerlo
+## Forma de trabajo: integración vertical
 
-- **P0:** resolver antes de cerrar la entrega o puede afectar un requisito de la pauta.
-- **P1:** importante para defender los resultados y demostrar que el sistema funciona.
-- **P2:** orden y coordinación del equipo; útil, pero no bloquea por sí solo la entrega.
-- Las asignaciones son roles provisionales porque aquí no están los nombres de los integrantes.
+Cada historia entrega una función completa que atraviesa el flujo **Riot API → `raw` → `staging` → `dw` → `mart` → consulta SQL → evidencia**. La persona responsable integra su indicador de punta a punta; las otras dos revisan el resultado. No se divide al equipo en responsables permanentes de API, base de datos o Airflow.
 
-## Estado actual del proyecto
+Las prioridades indican urgencia: **P0** bloquea la entrega o un requisito de pauta; **P1** mejora la demostración y la reproducibilidad.
 
-### Ya está implementado en el repositorio
+## Estado actual
 
-- PostgreSQL y Airflow levantados con Docker Compose; DDL con capas `raw`, `staging`, `dw` y `mart`.
-- DAG de perfiles (`Account-V1`, `Summoner-V4`, `League-V4`), DAG de partidas (`Match-V5`), DAG de KPI y DAG maestro.
-- Validación previa de API, reintentos básicos, registro de auditoría, carga idempotente y cinco tablas KPI.
-- Filtro Solo/Duo, conversión horaria a Chile, KDA con divisor mínimo 1, controles de muestra y respaldo/restauración de PostgreSQL.
-- Flujo de respaldo por Drive web documentado en el README.
+### Ya está implementado
 
-### Falta terminar, validar o entregar
+- Docker Compose con Airflow y PostgreSQL; DDL con capas `raw`, `staging`, `dw` y `mart`.
+- DAG de perfiles (Account-V1, Summoner-V4 y League-V4), DAG de partidas (Match-V5), DAG de KPI y DAG maestro.
+- Cinco KPI, filtro Solo/Duo, conversión horaria a Chile, KDA con divisor mínimo 1, umbrales de muestra y tablas de auditoría.
+- HU-01 implementada y validada en Docker: extracción paginada de hasta 50 partidas por jugador, consulta por Riot ID/rol y umbrales del KPI 1 acordados en 3 y 5 partidas.
+- Scripts para respaldar/restaurar PostgreSQL y flujo de Drive web documentado.
 
-- La extracción de partidas usa `count=20` y `start=0`; aún no recorre páginas para recuperar más historial.
-- El DAG maestro encadena las etapas estrictamente: si un DAG hijo falla, las etapas siguientes no avanzan. Además, el DAG de KPI no se dispara desde el DAG de partidas programado.
-- El pre-chequeo de API acepta como válido cualquier estado distinto de 401/403, incluidos errores de servidor; la métrica `porcentaje_nulos` tampoco cuenta nulos de manera consistente.
-- No aparecen todavía en el repositorio el informe PDF, la presentación ni el ZIP final con evidencias.
+### Pendientes confirmados al revisar el repo
 
-## Backlog priorizado
+- Falta ratificar con el equipo el límite operativo de hasta 50 jugadores y 50 IDs Solo/Duo por PUUID en cada ejecución; la retención en la base sigue siendo acumulativa.
+- El DAG maestro es secuencial: si falla un DAG hijo, no continúa a la siguiente etapa. El DAG programado de partidas tampoco dispara automáticamente el DAG de KPI.
+- El pre-chequeo de API puede aceptar errores 5xx; `porcentaje_nulos` no mide nulos de forma consistente.
+- Aún faltan en el repo el informe PDF, la presentación y el ZIP final con evidencias.
 
-### HU-01 — Recolectar una muestra suficiente y reproducible
+## Historias de usuario
 
-**Historia:** Como analista, quiero contar con suficientes partidas clasificatorias para que los indicadores por jugador, campeón y rol no dependan de unos pocos casos.
+### HU-01 — Recomendar campeones para un jugador y rol
 
-**Responsables sugeridos:** Integrante A.
+**Historia:** Como jugador, quiero buscar mi nombre y opcionalmente un rol para ver mis mejores campeones, con sus partidas, winrate, KDA y puntaje.
 
-- [ ] **P0** Definir con el equipo el tamaño final de la muestra. Propuesta para discutir: alrededor de 50 jugadores y hasta 50 partidas Solo/Duo por jugador, según límites y tiempo.
-- [ ] **P0** Implementar paginación con `start`/`count`; hoy se solicita una sola página de 20 IDs por jugador.
-- [ ] **P0** Aplicar límites de consulta y reintentos sin repetir descargas de `match_id` ya guardados.
-- [ ] **P1** Hacer una carga de muestra y registrar jugadores objetivo, fechas, partidas únicas y participaciones cargadas.
-- [ ] **P1** Confirmar que una partida compartida por varios jugadores objetivo aparece una vez en RAW y cada participante una vez en DW.
+**Responsable vertical sugerido:** Joaquín (integrante A). Sergio y Juan revisan la integración completa.
 
-**Criterio de término:** la cantidad recolectada coincide con el objetivo acordado, el rango de fechas queda documentado y no hay duplicados de partidas/participaciones.
+- [ ] **P0** Ratificar con el equipo el tamaño configurado como máximo operativo: hasta 50 jugadores y 50 partidas Solo/Duo por PUUID en cada ejecución, sujeto a los límites de Riot y al tiempo disponible.
+- [x] **P0** Completar la paginación `start`/`count`; consulta páginas de 20 hasta un máximo de 50 partidas por jugador en cada ejecución.
+- [x] **P1** Seguir un PUUID de Riot desde la extracción hasta una fila del KPI 1 en `mart`; 20 partidas de trazabilidad confirmaron el mismo PUUID en el payload RAW.
+- [x] **P1** Preparar la consulta SQL que recibe el nombre del jugador y un rol opcional, excluye muestras bajo el mínimo y ordena por `puntaje_compuesto`.
+- [x] **P1** Acordar y documentar los umbrales del KPI 1: puntaje exploratorio desde 3 partidas, `MUESTRA CORTA` entre 3 y 4, y evaluación de `cumple_meta` desde 5.
+- [x] **P1** Guardar evidencia del resultado: jugador, rol, partidas consideradas, campeón recomendado y fórmula aplicada.
 
-### HU-02 — Aislar fallas y completar la orquestación
+#### Evidencia del avance
 
-**Historia:** Como operador, quiero que la falla de una fuente no impida ejecutar las otras para que el pipeline tolere problemas temporales de Riot.
+La consulta de HU-01 para `Frikz#xoro` devuelve, entre otros, estos resultados:
 
-**Responsables sugeridos:** Integrante C.
+| Campeón | Rol | Partidas | Winrate | Estado de muestra | `cumple_meta` |
+|---|---|---:|---:|---|---|
+| Ekko | JUNGLE | 3 | 100,00% | `MUESTRA CORTA` | Sin evaluar |
+| Syndra | MIDDLE | 4 | 75,00% | `MUESTRA CORTA` | Sin evaluar |
+| Locke | MIDDLE | 5 | 60,00% | `MINIMO DE MUESTRA ALCANZADO` | Sí |
 
-- [ ] **P0** Rediseñar `dag_00_pipeline_completo`: actualmente espera éxito de cada hijo antes de iniciar el siguiente.
-- [ ] **P0** Decidir y documentar cuándo calcular KPI si un ETL de fuente falla; no ocultar una carga parcial como si fuera completa.
-- [ ] **P1** Disparar automáticamente `dag_03_calculo_kpis` después de una carga exitosa de partidas. Hoy el DAG 03 queda manual salvo que se use el maestro.
-- [ ] **P1** Justificar los schedules actuales (perfil diario y partidas cada 6 horas) y definir cómo se ejecuta un backfill por rango.
-- [ ] **P0** Preparar una falla controlada para la presentación y capturar reintentos, logs, auditoría y resultado de las demás etapas.
+La consulta de trazabilidad listó 20 partidas y confirmó `puuid_presente_en_payload = true` para cada una. El recálculo produjo 13.167 filas en los cinco marts; Airflow no reportó errores de importación y los servicios de Docker Compose quedaron saludables. La fórmula del puntaje (winrate 60%, KDA 25% y volumen 15%) y los umbrales están en [la definición de indicadores](indicadores_etl_riot_games.md) y [la consulta HU-01](../sql/02_consulta_kpi_01_jugador.sql).
 
-**Criterio de término:** una falla simulada queda registrada y no bloquea la ejecución de la fuente independiente; los KPI solo reflejan los datos que sí se cargaron.
+**Criterio de término:** una persona puede consultar el KPI 1 con nombre/rol y rastrear el resultado hasta las partidas guardadas, sin duplicar participaciones.
 
-### HU-03 — Hacer confiables el chequeo y las métricas de calidad
+### HU-02 — Analizar horarios y actividad diaria
 
-**Historia:** Como responsable de datos, quiero que los controles y la auditoría reflejen errores reales para poder explicar la calidad de la carga.
+**Historia:** Como jugador, quiero comparar mis resultados por horario y revisar cuántas partidas juego al día para organizar mis sesiones.
 
-**Responsables sugeridos:** Integrante B.
+**Responsable vertical sugerido:** Sergio (integrante B). Joaquín y Juan revisan la integración completa.
 
-- [ ] **P0** Corregir `validar_estado_api` para que errores 5xx y estados inesperados fallen el chequeo, en vez de aceptarse como API disponible.
-- [ ] **P1** Completar el manejo de errores HTTP y registrar el tipo de fallo; el helper actual ya maneja red y 429, pero no reintenta todos los errores 5xx.
-- [ ] **P0** Definir qué significa `porcentaje_nulos` por DAG y calcularlo sobre los campos esperados. El DAG de KPI hoy registra 0% fijo y el DAG de perfil usa un contador de `UNRANKED` como aproximación de nulos.
-- [ ] **P1** Completar una tabla/resumen de auditoría con filas leídas y cargadas, inválidos/nulos, duración y estado por ejecución.
-- [ ] **P1** Preparar consultas SQL para mostrar filas por tabla, partidas únicas, participaciones, distribución de colas y resultados KPI.
+- [ ] **P0** Resolver la diferencia de definición del KPI 2: el código agrupa en bloques de cuatro horas y la propuesta conceptual habla de horas individuales. Alinear SQL, README e informe.
+- [ ] **P1** Seguir `gameCreation` desde Match-V5 a hora/fecha de Chile en `dw.dim_tiempo` y comprobar la agrupación seleccionada.
+- [ ] **P1** Verificar que el KPI 2 compare el winrate de la franja con el winrate global del mismo jugador y no recomiende muestras bajo el mínimo de 10 partidas.
+- [ ] **P1** Verificar el KPI 4 de punta a punta: actividad diaria, alerta desde 7 partidas y winrate diario solo desde 10.
+- [ ] **P1** Preparar consultas SQL y capturas de resultados para ambos KPI.
 
-**Criterio de término:** cada porcentaje tiene una fórmula definida y los datos de `etl_audit` se pueden defender con consultas a las tablas fuente.
+**Criterio de término:** horario y fecha usan la zona `America/Santiago`; las consultas muestran partidas y tamaño de muestra, y el informe explica la interpretación sin afirmar causalidad.
 
-### HU-04 — Cerrar y mostrar los cinco indicadores
+### HU-03 — Evaluar desempeño por rol y meta observado
 
-**Historia:** Como integrante del equipo, quiero explicar qué mide cada KPI y consultar resultados por jugador para responder preguntas de gestión.
+**Historia:** Como analista, quiero comparar el desempeño por rol y los resultados de campeones en la muestra recolectada, separados por parche.
 
-**Responsables sugeridos:** Integrante B + equipo.
+**Responsable vertical sugerido:** Juan (integrante C). Joaquín y Sergio revisan la integración completa.
 
-- [ ] **P0** Acordar que el KPI 2 se presentará por bloques de cuatro horas (como está codificado) o cambiarlo a hora individual (como dice la especificación conceptual); dejar una sola definición en código, README e informe.
-- [ ] **P0** Aprobar los pesos del puntaje compuesto de KPI 1 y las referencias del KPI 3; actualmente son parámetros del proyecto, no referencias oficiales de Riot.
-- [ ] **P1** Añadir al README consultas SQL para buscar un jugador por `nombre_jugador`, filtrar un rol opcional y ordenar sus campeones por `puntaje_compuesto`, mostrando también partidas y estado de muestra.
-- [ ] **P1** Revisar manualmente resultados conocidos y verificar que `cumple_meta`, mínimos de muestra, KDA sin muertes y parche se interpreten como está documentado.
-- [ ] **P1** Escribir para cada KPI: nombre, objetivo, fórmula, fuente, periodicidad, umbral y limitación de interpretación.
+- [ ] **P0** Acordar y documentar las referencias de KPI 3 por rol. Las actuales son parámetros del proyecto, no benchmarks oficiales de Riot.
+- [ ] **P1** Seguir estadísticas de Match-V5 por participante desde `raw` hasta la calificación por rol y validar daño/oro/visión por minuto.
+- [ ] **P1** Confirmar y documentar la aproximación de JG: `dragonKills + baronKills` del jugador por partida, no todos los objetivos del equipo.
+- [ ] **P1** Verificar que KPI 5 agrupe por campeón, rol y parche, cuente cada participación una sola vez y no clasifique muestras menores de 10 como dominantes.
+- [ ] **P1** Preparar consultas SQL y evidencia de una calificación por rol y de un resultado de meta observado.
 
-**Criterio de término:** se puede responder una consulta de jugador/campeón/rol con su tamaño de muestra y explicar la fórmula sin contradicciones entre código y documentos.
+**Criterio de término:** cada valor se puede seguir desde la participación del jugador hasta el resultado en `mart`; las limitaciones de muestra/parche quedan explicadas.
 
-### HU-05 — Preparar informe, evidencia y presentación
+### HU-04 — Hacer confiable la ejecución completa
 
-**Historia:** Como equipo, queremos entregar un paquete reproducible y una exposición clara que demuestren el trabajo realizado.
+**Historia:** Como operador, quiero que los errores de una fuente queden registrados y no impidan procesar las fuentes independientes.
 
-**Responsables sugeridos:** Integrante C coordina; A redacta fuentes/extracción; B modelo/calidad/KPI; todos revisan.
+**Responsable de coordinación sugerido:** rotativo entre Joaquín, Sergio y Juan; los tres integran y revisan el cambio porque afecta las tres historias.
 
-- [ ] **P0** Crear el informe PDF con portada, fuentes y justificación, pasos ETL, modelo, diseño de DAGs, indicadores, estrategia de datos y conclusiones.
-- [ ] **P0** Incluir las 2–3 páginas de estrategia de datos requeridas: decisiones, calidad, origen/transformaciones, frecuencia, riesgos y escalabilidad.
-- [ ] **P0** Adjuntar evidencia real: capturas de ejecuciones exitosas y fallidas en Airflow, logs, consultas SQL y resultados de auditoría.
-- [ ] **P0** Crear la presentación de 8–12 láminas y planificar la exposición de 8 minutos.
-- [ ] **P0** Preparar el ZIP final con DAGs, utilidades, DDL y README. Excluir `.env`, claves Riot y respaldos `.dump` salvo que la profesora los pida expresamente.
-- [ ] **P1** Repartir preguntas de dominio entre los tres y hacer un ensayo cronometrado.
+- [ ] **P0** Corregir el chequeo de API para que estados 5xx/inesperados fallen en vez de marcar la API como disponible.
+- [ ] **P1** Completar reintentos y registro de errores HTTP; el código ya contempla red y 429, pero no reintenta todos los errores 5xx.
+- [ ] **P0** Cambiar la orquestación: hoy `dag_00_pipeline_completo` espera éxito de cada hijo; definir cómo sigue la otra fuente y cuándo se permite calcular KPI con carga parcial.
+- [ ] **P1** Disparar el cálculo de KPI después de una carga programada exitosa de partidas y aclarar los schedules/backfill.
+- [ ] **P0** Calcular correctamente los nulos/errores por DAG; el KPI registra 0% fijo y el perfil cuenta `UNRANKED` como aproximación de nulos.
+- [ ] **P0** Demostrar una falla controlada en Airflow: capturar retries, logs, auditoría y ejecución de la fuente independiente.
 
-**Criterio de término:** un integrante que no preparó una sección puede reproducir el proyecto siguiendo el README y cada integrante puede explicar el flujo y sus límites.
+**Criterio de término:** una falla controlada queda visible en Airflow/auditoría, la fuente independiente continúa y los KPI indican qué datos fueron procesados.
 
-### HU-06 — Compartir una captura común con Drive web
+### HU-05 — Entregar y reproducir el proyecto en equipo
 
-**Historia:** Como equipo de tres, queremos partir desde la misma captura de PostgreSQL sin confundirla con una base sincronizada en vivo.
+**Historia:** Como equipo, queremos demostrar que otra persona puede reproducir el ETL y entender los cinco indicadores.
 
-**Responsables sugeridos:** Integrante A publica el respaldo; B y C restauran; todos verifican.
+**Responsabilidad:** todos aportan evidencia de su historia vertical; una persona integra el informe y otra la presentación.
 
-- [ ] **P1** Elegir quién publica el respaldo vigente y acordar cuándo se actualiza.
-- [ ] **P1** Subir el primer `gestion_lol_*.dump` a la carpeta compartida de Drive web después de la carga acordada.
-- [ ] **P1** Cada integrante descarga y restaura esa captura con `Restore-GestionLol.ps1` en su PostgreSQL local.
-- [ ] **P1** Comparar conteos de filas en cada computador para confirmar que restauraron el mismo respaldo.
+- [ ] **P0** Crear el informe PDF con fuentes y justificación, flujo ETL, modelo, DAGs, KPI, estrategia de datos y conclusiones.
+- [ ] **P0** Escribir las 2–3 páginas de estrategia de datos: decisiones, calidad, origen/transformación, frecuencia, riesgos y escalabilidad.
+- [ ] **P0** Adjuntar evidencia real: DAG exitoso y fallido, logs, consultas SQL, resultados y auditoría.
+- [ ] **P0** Preparar la presentación de 8–12 láminas y organizar la exposición de 8 minutos.
+- [ ] **P0** Crear el ZIP con DAGs, utilidades, DDL y README; excluir `.env`, claves y respaldos `.dump` salvo que la profesora los pida.
+- [ ] **P1** Publicar el respaldo acordado en la carpeta Drive web; cada integrante lo descarga/restaura y comparan conteos para comprobar que trabajan con la misma captura.
+- [ ] **P1** Ensayar preguntas: cada integrante explica su historia vertical y puede describir el flujo de punta a punta.
 
-**Criterio de término:** los tres tienen la misma captura local; todo respaldo posterior sustituye la captura anterior y no se intenta fusionar dumps.
+**Criterio de término:** el ZIP se reproduce siguiendo el README, el informe contiene evidencia de ejecuciones reales y los tres pueden explicar el proyecto completo.
 
-## Reparto sugerido entre tres
+## Reparto vertical sugerido
 
-| Integrante | Foco principal | Entregables que lidera |
+| Integrante | Historia principal | Resultado que entrega de punta a punta |
 |---|---|---|
-| A | Recolección de datos | HU-01 y publicación de respaldo de HU-06 |
-| B | Calidad, base y KPI | HU-03, HU-04 y sección técnica del informe |
-| C | Airflow y entregables | HU-02, coordinación de HU-05 y presentación |
-| Todos | Decisiones y evaluación | Revisar resultados, restaurar respaldo, ensayo y preguntas |
+| Joaquín (A) | HU-01: campeón por jugador/rol | Consulta de jugador → KPI 1 en `mart` → recomendación con muestra y evidencia |
+| Sergio (B) | HU-02: horario/actividad | Hora local → KPI 2 y KPI 4 → consultas y capturas |
+| Juan (C) | HU-03: rol/meta | Estadísticas por participante/parche → KPI 3 y KPI 5 → consultas y capturas |
+| Los tres | HU-04 y HU-05 | Orquestación confiable, informe, presentación, ZIP y revisión cruzada |
 
-## Orden recomendado para avanzar
+## Orden recomendado
 
-1. **Primero:** acordar el tamaño de muestra y arrancar la recolección paginada de HU-01.
-2. **En paralelo:** A implementa la paginación; B corrige métricas de calidad y valida KPI; C arregla la tolerancia a fallas y el disparo de KPI.
-3. **Después de una carga válida:** generar datos de evidencia, consultas y respaldo compartido.
-4. **Cierre:** informe, presentación, ZIP, revisión de secretos y ensayo grupal.
+1. Acordar el objetivo de muestra y la definición final del KPI 2.
+2. Cada integrante cierra su historia desde la extracción existente hasta su consulta SQL y evidencia; en paralelo, el equipo integra HU-04.
+3. Ejecutar una carga común y revisar los resultados de las tres historias sobre la misma base.
+4. Cerrar informe, ZIP, presentación y ensayo.
 
-> No se propone construir un dashboard: la pauta dice que no es requisito.
+> La pauta no exige un dashboard; no se incluye como tarea.

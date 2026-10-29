@@ -2,6 +2,7 @@ import os
 import time
 import logging
 from datetime import datetime, timezone
+from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 import requests
 import pandas as pd
@@ -15,6 +16,9 @@ logger = logging.getLogger(__name__)
 DEFAULT_AMERICAS_URL = "https://americas.api.riotgames.com"
 DEFAULT_LAS_URL = "https://la2.api.riotgames.com"
 QUEUE_RANKED_SOLO_DUO = 420
+MAX_TARGET_PLAYERS = 50
+MAX_MATCHES_PER_PLAYER = 50
+MATCH_ID_PAGE_SIZE = 20
 CHILE_TIMEZONE = ZoneInfo("America/Santiago")
 
 
@@ -322,6 +326,12 @@ def extract_perfiles_riot(target_players, api_key, americas_url=DEFAULT_AMERICAS
     """
     Extrae perfiles desde Account-V1, Summoner-V4 y League-V4 y los persiste en raw.raw_perfil_jugador.
     """
+    if len(target_players) > MAX_TARGET_PLAYERS:
+        raise ValueError(
+            f"La muestra admite hasta {MAX_TARGET_PLAYERS} jugadores; "
+            f"se recibieron {len(target_players)}."
+        )
+
     headers = get_riot_headers(api_key)
     engine = get_db_engine()
     registros_guardados = 0
@@ -537,26 +547,50 @@ def load_dw_dim_jugador():
 
 #pipeline#2 historial de partidas (Match-V5)
 
-def extraer_partidas_riot(api_key, puuids=None, count=20, start_time=None, end_time=None,
-                          americas_url=DEFAULT_AMERICAS_URL):
+def extraer_partidas_riot(api_key, puuids=None, max_partidas_por_jugador=50,
+                          start_time=None, end_time=None, americas_url=DEFAULT_AMERICAS_URL,
+                          page_size=MATCH_ID_PAGE_SIZE):
     """
     Obtiene IDs de partidas para los PUUIDs indicados (o los presentes en dw.dim_jugador),
     verifica cuáles ya existen en raw.raw_partidas para no repetir peticiones innecesarias,
-    descarga el detalle JSON e inserta en raw.raw_partidas.
+    pagina el historial hasta el máximo por jugador y descarga los detalles JSON nuevos.
     """
+    max_partidas_por_jugador = int(max_partidas_por_jugador)
+    page_size = int(page_size)
+    if not 1 <= max_partidas_por_jugador <= MAX_MATCHES_PER_PLAYER:
+        raise ValueError(
+            f"max_partidas_por_jugador debe estar entre 1 y {MAX_MATCHES_PER_PLAYER}."
+        )
+    if not 1 <= page_size <= 100:
+        raise ValueError("page_size debe estar entre 1 y 100.")
+
     headers = get_riot_headers(api_key)
     engine = get_db_engine()
     ensure_analytics_schema(engine)
 
-    # Si no vienen PUUIDs, buscar en dw.dim_jugador o en staging.stg_jugador
+    # La dimensión también contiene participantes de partidas con nombre provisional.
+    # Solo se consultan perfiles reales de staging y dimensiones con Riot ID conocido.
     if not puuids:
         with engine.connect() as conn:
-            res = conn.execute(text("SELECT puuid FROM dw.dim_jugador UNION SELECT puuid FROM staging.stg_jugador;"))
+            res = conn.execute(text("""
+                SELECT puuid FROM staging.stg_jugador
+                UNION
+                SELECT puuid
+                FROM dw.dim_jugador
+                WHERE LEFT(nombre_completo, 8) <> 'Jugador_';
+            """))
             puuids = [r[0] for r in res.fetchall()]
 
     if not puuids:
         logger.warning("No hay PUUIDs para consultar partidas.")
         return 0
+
+    puuids = list(dict.fromkeys(puuid for puuid in puuids if puuid))
+    if len(puuids) > MAX_TARGET_PLAYERS:
+        raise ValueError(
+            f"La muestra admite hasta {MAX_TARGET_PLAYERS} jugadores; "
+            f"se encontraron {len(puuids)} PUUIDs en la base."
+        )
 
     # Partidas ya existentes en raw para evitar consultas redundantes
     with engine.connect() as conn:
@@ -567,17 +601,47 @@ def extraer_partidas_riot(api_key, puuids=None, count=20, start_time=None, end_t
     import json
 
     for puuid in puuids:
-        url_ids = (
-            f"{americas_url}/lol/match/v5/matches/by-puuid/{puuid}/ids"
-            f"?start=0&count={count}&queue={QUEUE_RANKED_SOLO_DUO}"
-        )
-        if start_time:
-            url_ids += f"&startTime={start_time}"
-        if end_time:
-            url_ids += f"&endTime={end_time}"
+        match_ids = []
+        match_ids_vistos = set()
+        start = 0
 
-        match_ids = request_riot_api(url_ids, headers) or []
-        logger.info(f"PUUID {puuid[:12]}... devolvió {len(match_ids)} IDs de partidas.")
+        while len(match_ids) < max_partidas_por_jugador:
+            page_count = min(page_size, max_partidas_por_jugador - len(match_ids))
+            params = {
+                "start": start,
+                "count": page_count,
+                "queue": QUEUE_RANKED_SOLO_DUO,
+            }
+            if start_time is not None:
+                params["startTime"] = start_time
+            if end_time is not None:
+                params["endTime"] = end_time
+
+            url_ids = (
+                f"{americas_url}/lol/match/v5/matches/by-puuid/{puuid}/ids"
+                f"?{urlencode(params)}"
+            )
+            pagina = request_riot_api(url_ids, headers) or []
+            logger.info(
+                f"PUUID {puuid[:12]}... página start={start}, "
+                f"devolvió {len(pagina)} IDs."
+            )
+
+            for match_id in pagina:
+                if match_id not in match_ids_vistos:
+                    match_ids.append(match_id)
+                    match_ids_vistos.add(match_id)
+                    if len(match_ids) == max_partidas_por_jugador:
+                        break
+
+            if not pagina or len(pagina) < page_count:
+                break
+            start += len(pagina)
+
+        logger.info(
+            f"PUUID {puuid[:12]}... reunió {len(match_ids)} IDs "
+            f"(máximo {max_partidas_por_jugador})."
+        )
 
         for mid in match_ids:
             if mid in partidas_existentes:
@@ -953,15 +1017,20 @@ def load_dw_hechos_y_tiempo():
 
 #pipeline#3 KPIs en capa mart
 
-def calcular_kpis_mart(min_partidas_kpi1=10, min_partidas_kpi2=10,
-                       min_partidas_kpi3=10, min_partidas_kpi5=10):
+def calcular_kpis_mart(min_partidas_kpi1=3, min_partidas_kpi1_adecuada=5,
+                       min_partidas_kpi2=10, min_partidas_kpi3=10,
+                       min_partidas_kpi5=10):
     """Recalcula los cinco KPI solo con ranked Solo/Duo y muestra visible."""
+    if min_partidas_kpi1 < 1 or min_partidas_kpi1_adecuada < min_partidas_kpi1:
+        raise ValueError("El piso exploratorio del KPI 1 debe ser positivo y no superar el mínimo para evaluar la meta.")
+
     engine = get_db_engine()
     ensure_analytics_schema(engine)
 
     # KPI 1: KDA agregado con sumas y divisor mínimo 1; no se promedian KDA por partida.
     # El puntaje combina winrate (60%), KDA normalizado (25%) y volumen hasta 50
-    # partidas (15%). El puntaje y el cumplimiento quedan nulos bajo el mínimo.
+    # partidas (15%). Desde 3 partidas se muestra un puntaje exploratorio; solo desde
+    # 5 se evalúa el cumplimiento de la meta de winrate.
     sql_kpi1 = text("""
         WITH agregados AS (
             SELECT
@@ -1009,10 +1078,11 @@ def calcular_kpis_mart(min_partidas_kpi1=10, min_partidas_kpi2=10,
             END AS puntaje_compuesto,
             CASE
                 WHEN partidas_jugadas < :min_partidas_kpi1 THEN 'MUESTRA INSUFICIENTE'
+                WHEN partidas_jugadas < :min_partidas_kpi1_adecuada THEN 'MUESTRA CORTA'
                 ELSE 'MINIMO DE MUESTRA ALCANZADO'
             END AS estado_muestra,
             CASE
-                WHEN partidas_jugadas < :min_partidas_kpi1 THEN NULL
+                WHEN partidas_jugadas < :min_partidas_kpi1_adecuada THEN NULL
                 ELSE winrate_pct > 55.0
             END AS cumple_meta,
             CURRENT_TIMESTAMP
@@ -1225,7 +1295,10 @@ def calcular_kpis_mart(min_partidas_kpi1=10, min_partidas_kpi2=10,
             conn.execute(text(f"DELETE FROM {tabla};"))
 
         resultados = [
-            conn.execute(sql_kpi1, {"min_partidas_kpi1": min_partidas_kpi1}),
+            conn.execute(sql_kpi1, {
+                "min_partidas_kpi1": min_partidas_kpi1,
+                "min_partidas_kpi1_adecuada": min_partidas_kpi1_adecuada,
+            }),
             conn.execute(sql_kpi2, {"min_partidas_kpi2": min_partidas_kpi2}),
             conn.execute(sql_kpi3, {"min_partidas_kpi3": min_partidas_kpi3}),
             conn.execute(sql_kpi4),

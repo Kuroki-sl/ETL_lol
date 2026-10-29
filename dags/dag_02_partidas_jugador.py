@@ -46,21 +46,26 @@ def partidas_jugador_etl():
     def extraer_partidas_raw(valido: bool, **context):
         """
         Descarga los IDs de partidas para los jugadores registrados y sus detalles JSON.
-        Permite backfill mediante parámetros conf={'start_time': ..., 'end_time': ..., 'count': ...}.
+        Permite acotar la muestra y hacer backfill con max_partidas_por_jugador,
+        start_time y end_time.
         """
         americas_url = Variable.get("riot_api_base_americas", default_var=DEFAULT_AMERICAS_URL)
         api_key = Variable.get("riot_api_key", default_var=None)
 
         # Parámetros pasados en DAG Run (ej. backfill)
         dag_run_conf = context.get("dag_run").conf or {} if context.get("dag_run") else {}
-        count = dag_run_conf.get("count", 20)
+        # count se conserva como alias para DAG Runs creados con la configuración anterior.
+        max_partidas_por_jugador = dag_run_conf.get(
+            "max_partidas_por_jugador",
+            dag_run_conf.get("count", 50)
+        )
         start_time = dag_run_conf.get("start_time", None)
         end_time = dag_run_conf.get("end_time", None)
 
         t_inicio = time.time()
         nuevas_cargadas = extraer_partidas_riot(
             api_key=api_key,
-            count=count,
+            max_partidas_por_jugador=max_partidas_por_jugador,
             start_time=start_time,
             end_time=end_time,
             americas_url=americas_url
