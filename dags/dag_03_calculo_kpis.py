@@ -51,7 +51,8 @@ def calculo_kpis_etl():
                 "t_inicio": t_inicio
             }
         filas_actualizadas = calcular_kpis_mart(
-            min_partidas_kpi1=10,
+            min_partidas_kpi1=3,
+            min_partidas_kpi1_adecuada=5,
             min_partidas_kpi2=10,
             min_partidas_kpi3=10,
             min_partidas_kpi5=10,

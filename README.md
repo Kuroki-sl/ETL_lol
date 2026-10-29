@@ -13,7 +13,8 @@ proyecto_etl_lol/
 │   ├── dag_02_partidas_jugador.py  # DAG 2: Historial y Telemetría de Partidas (Match-V5)
 │   └── dag_03_calculo_kpis.py      # DAG 3: Cálculo SQL de los 5 Indicadores en capa mart
 ├── sql/
-│   └── 01_init_db.sql              # DDL (Esquemas raw, staging, dw, mart y tabla public.etl_audit)
+│   ├── 01_init_db.sql              # DDL (Esquemas raw, staging, dw, mart y tabla public.etl_audit)
+│   └── 02_consulta_kpi_01_jugador.sql # Consulta de recomendación y trazabilidad para HU-01
 ├── scripts/
 │   ├── Backup-GestionLol.ps1        # Exporta solo la base de datos del ETL
 │   └── Restore-GestionLol.ps1       # Restaura un respaldo compartido
@@ -144,6 +145,21 @@ Cada DAG mantiene total independencia y tolerancia a fallas:
 * **`dag_02_partidas_jugador`**: Descarga partidas nuevas, filtra remakes y sincroniza `dw.fact_partidas` y `dw.dim_tiempo` (Schedule cada 6h: `0 */6 * * *`).
 * **`dag_03_calculo_kpis`**: Ejecuta el cómputo analítico SQL sobre `mart`.
 
+### Muestra y consulta de campeones por jugador (HU-01)
+
+La variable `riot_target_players` admite hasta 50 jugadores. En cada ejecución, el DAG de partidas consulta hasta 50 IDs Solo/Duo (`queue_id=420`) por PUUID, en páginas de 20 y avanzando `start` hasta completar la muestra o agotar el historial. Para una ejecución manual se puede limitar la cantidad con la configuración del DAG Run, por ejemplo `{"max_partidas_por_jugador": 20}`; el valor permitido es de 1 a 50. `count` sigue disponible como alias para configuraciones antiguas. El límite se aplica a cada ejecución; las partidas únicas ya cargadas se conservan en la base.
+
+Para consultar campeones, el archivo `sql/02_consulta_kpi_01_jugador.sql` viene configurado para `Frikz#xoro`; edita el Riot ID si quieres consultar otro jugador y el rol opcional si quieres filtrar. Dejar el rol vacío para incluir todos, o indicar `TOP`, `JUNGLE`, `MIDDLE`, `BOTTOM` o `UTILITY`. Desde 3 partidas la consulta muestra candidatos exploratorios y los ordena por puntaje compuesto; con 3 o 4 quedan como `MUESTRA CORTA` y `cumple_meta` es nulo. Desde 5 partidas se evalúa si el winrate supera el 55%. Ejecutarla después de calcular los KPI:
+
+```powershell
+Get-Content .\sql\02_consulta_kpi_01_jugador.sql -Raw |
+  docker compose exec -T lol-postgres psql -U postgres -d gestion_lol
+```
+
+El mismo archivo incluye una consulta de trazabilidad que devuelve el PUUID junto a sus partidas del DW y comprueba su presencia en el payload Match-V5 guardado en RAW.
+
+El avance y la evidencia validada para HU-01 están resumidos en [`docs/avance_hu01.md`](docs/avance_hu01.md).
+
 ---
 
 ## Arquitectura del Pipeline y Capas de Datos
@@ -154,13 +170,13 @@ Cada DAG mantiene total independencia y tolerancia a fallas:
   * Dimensiones: `dw.dim_jugador`, `dw.dim_tiempo` (fecha y hora local de Chile).
   * Tabla de Hechos: `dw.fact_partidas`, con una fila por jugador y partida, incluyendo cola y parche. El payload de cada partida se guarda una vez; la carga deduplica por `(match_id, puuid)`.
 * **Capa `mart` (Indicadores de Gestión / KPIs):**
-  1. `mart.kpi_01_mejores_campeones`: winrate, KDA agregado y puntaje compuesto por jugador/campeón/rol. Requiere 10 partidas para puntuar; menos se marca como muestra insuficiente. El puntaje pondera winrate (60%), KDA normalizado (25%) y volumen hasta 50 partidas (15%).
+  1. `mart.kpi_01_mejores_campeones`: winrate, KDA agregado y puntaje compuesto por jugador/campeón/rol. Desde 3 partidas puntúa de forma exploratoria; de 3 a 4 se marca `MUESTRA CORTA`, y `cumple_meta` solo se evalúa desde 5. El puntaje pondera winrate (60%), KDA normalizado (25%) y volumen hasta 50 partidas (15%).
   2. `mart.kpi_02_winrate_horario`: winrate por bloque local de 4 horas, comparado con el winrate global del jugador. Con menos de 10 partidas por bloque se muestra como muestra insuficiente y no se recomienda esa franja.
   3. `mart.kpi_03_calificacion_rol`: desde 10 partidas, calcula dos factores según el rol, limita cada factor al rango 0–1 y promedia ambos para obtener `1 + 6 × promedio` (escala 1,0–7,0). TOP usa daño/minuto (600) y daño a torres/minuto (150); JUNGLE usa KDA agregado (4) y dragones/barones del jugador por partida (1); MIDDLE usa KDA (4) y daño/minuto (700); ADC usa daño/minuto (750) y oro/minuto (450); SUPPORT usa KDA (4) y visión/minuto (2). `SUPERA META` significa nota mayor que 5,0. Son referencias definidas para este proyecto, no benchmarks oficiales de Riot.
   4. `mart.kpi_04_control_actividad_diaria`: partidas y horas jugadas por fecha local; alerta desde 7 partidas. El winrate diario solo se muestra desde 10 partidas y la alerta no diagnostica fatiga.
   5. `mart.kpi_05_tierlist_meta_vs_otp`: meta observado por campeón/rol/parche en las partidas recolectadas, considerando a todos sus participantes. Requiere 10 participaciones para clasificar; no identifica OTP ni representa automáticamente todo LAS.
 
-El KDA por partida se calcula como `(asesinatos + asistencias) / MAX(muertes, 1)`, por lo que una partida sin muertes usa 1 como divisor y no recibe una penalización. Para comparar un período se usa `(suma de asesinatos + suma de asistencias) / MAX(suma de muertes, 1)`, sin promediar los KDA individuales. Los mínimos de 10 partidas son guardas operativas para evitar etiquetar muestras muy pequeñas; no equivalen a una prueba de significancia estadística. En KPI 3, la métrica de jungla usa dragones/barones asegurados por partida como aproximación individual, no los súbditos neutrales ni todos los objetivos del equipo.
+El KDA por partida se calcula como `(asesinatos + asistencias) / MAX(muertes, 1)`, por lo que una partida sin muertes usa 1 como divisor y no recibe una penalización. Para comparar un período se usa `(suma de asesinatos + suma de asistencias) / MAX(suma de muertes, 1)`, sin promediar los KDA individuales. KPI 2, 3 y 5 mantienen mínimos operativos de 10 partidas; KPI 1 muestra puntajes exploratorios desde 3 y solo evalúa la meta desde 5. Estos límites no equivalen a una prueba de significancia estadística. En KPI 3, la métrica de jungla usa dragones/barones asegurados por partida como aproximación individual, no los súbditos neutrales ni todos los objetivos del equipo.
 * **Trazabilidad y Auditoría:** `public.etl_audit` registra DAG, run_id, fecha, filas leídas, filas cargadas, porcentaje de nulos/inválidos, duración y detalle de excepciones (`on_failure_callback`).
 
 ---

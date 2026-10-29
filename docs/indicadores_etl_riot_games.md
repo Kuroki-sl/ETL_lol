@@ -41,20 +41,20 @@ En la implementación actual se añade un **puntaje compuesto de 0 a 100** para 
 +0{,}15\times\min(100,2\times\operatorname{Partidas})
 \]
 
-El puntaje se calcula desde 10 partidas. El componente de KDA llega a su máximo al alcanzar 5,0; el componente de volumen llega al máximo en 50 partidas. El umbral `cumple_meta` sigue evaluando winrate > 55% una vez alcanzado el mínimo de muestra.
+El puntaje exploratorio se calcula desde 3 partidas. Entre 3 y 4 se marca **«Muestra corta»**; desde 5 partidas se considera adecuada para evaluar `cumple_meta` (winrate > 55%). El componente de KDA llega a su máximo al alcanzar 5,0; el componente de volumen llega al máximo en 50 partidas.
 
 **Fuentes:** Match-V5 para participaciones y resultados, Account-V1 para identificar el perfil por `puuid`, y Data Dragon para nombres de campeones. Summoner-V4 puede aportar atributos complementarios del jugador, pero no es necesario para calcular el winrate.
 
 **Periodicidad propuesta:** Semanal, por ejemplo, sobre una ventana móvil de datos disponibles.
 
-**Meta / umbral:** **Winrate > 55%**. Se propone además **un mínimo de 10 partidas por campeón** dentro del grupo analizado para evaluar el cumplimiento de la meta.
+**Meta / umbral:** **Winrate > 55%**. Se muestran candidatos desde **3 partidas**; se requieren **5 partidas por campeón y rol** para evaluar el cumplimiento de la meta.
 
 **Reglas e interpretación:**
 
 - Mostrar partidas jugadas, victorias y winrate.
-- Si el grupo tiene menos de 10 partidas, clasificarlo como **«Muestra insuficiente»** y no como campeón que supera o incumple la meta.
-- Evaluar por separado las muestras de la vista general y de cada rol. Diez partidas en general no implican diez partidas en TOP, por ejemplo.
-- El 55% y el mínimo de 10 son decisiones del proyecto, no reglas oficiales del juego.
+- Con menos de 3 partidas, marcar **«Muestra insuficiente»** y no calcular puntaje. Con 3 o 4, mostrar el candidato como **«Muestra corta»** sin afirmar que supera o incumple la meta. Desde 5 partidas, evaluar el winrate frente al 55%.
+- Evaluar por separado las muestras de la vista general y de cada rol. Cinco partidas en general no implican cinco partidas en TOP, por ejemplo.
+- El 55%, el piso exploratorio de 3 y el mínimo adecuado de 5 son decisiones del proyecto, no reglas oficiales del juego ni una garantía de significancia estadística.
 
 **Ejemplo:** Un campeón con 1 victoria en 1 partida muestra 100%, pero queda marcado como muestra insuficiente. Otro con 12 victorias en 20 partidas muestra 60% y supera el umbral.
 
@@ -241,7 +241,7 @@ El mínimo de partidas **reduce la sensibilidad a muestras pequeñas**, pero **n
 
 | KPI | Nivel de análisis | Métrica principal | Meta o regla | Ajuste clave |
 |---|---|---|---|---|
-| 1. Winrate por campeón | Jugador, campeón y rol | Victorias / partidas | > 55%, mínimo 10 partidas | Evitar rankings basados en 1–2 partidas |
+| 1. Winrate por campeón | Jugador, campeón y rol | Victorias / partidas | Mostrar desde 3; evaluar > 55% desde 5 partidas | Marcar 3–4 como muestra corta y evitar rankings de muestras mínimas |
 | 2. Winrate horario | Jugador y bloque local de 4 horas | Victorias / partidas por bloque | > 50%, mínimo 10 partidas por bloque | Comparar con el winrate global ponderado por partidas |
 | 3. Calificación por rol | Jugador y rol | Dos factores normalizados y nota 1–7 | Nota > 5,0, mínimo 10 partidas | Pasar acumulados a tasas por minuto y usar referencias operativas documentadas |
 | 4. Partidas por día | Jugador y fecha local | Recuento de partidas | Alerta desde 7 partidas | Mostrar winrate diario solo desde 10 partidas; medir actividad, no diagnosticar fatiga |
@@ -257,7 +257,7 @@ Los cinco indicadores pueden construirse a partir de una tabla de hechos a nivel
 - Contexto competitivo: `queueId` y `gameVersion` de la partida.
 - Control de calidad: deduplicación por `(match_id, puuid)`, validación de roles y tratamiento explícito de remakes y datos incompletos.
 
-**Punto pendiente de diseño:** Para el KPI 3 hace falta cerrar los valores de referencia y la métrica individual exacta de objetivos de JG. Para los KPI 1 y 5 los mínimos de 10 partidas son ejemplos de umbral de elegibilidad, ajustables de acuerdo con el volumen real de registros obtenido.
+**Punto pendiente de diseño:** Para el KPI 3 hace falta cerrar los valores de referencia y la métrica individual exacta de objetivos de JG. En KPI 1 se muestran candidatos desde 3 partidas y se conserva el mínimo de 5 para evaluar la meta; para KPI 5, 10 participaciones es un umbral operativo ajustable al volumen recolectado.
 
 ## 4. Conclusión
 
@@ -274,8 +274,8 @@ Esta sección registra cómo quedó implementado el proyecto después de las cor
 1. **KDA cuando hay cero muertes:** se corrigió el tratamiento anterior que dejaba el KDA nulo. Por partida se divide por `MAX(muertes, 1)`; en una agregación se divide por `MAX(suma de muertes, 1)`. Por eso, por ejemplo, una partida `5/0/10` tiene KDA 15, no nulo ni penalizado. El KDA del período se calcula con las sumas del período, no como promedio de los KDA por partida.
 2. **Partidas duplicadas o participaciones omitidas:** `raw.raw_partidas` guarda una sola fila por `match_id` y conserva la extracción más reciente si había duplicados. La transformación procesa una vez cada partida guardada e incluye sus diez participantes, con una fila por `(match_id, puuid)`. La sincronización actualiza los hechos desde STAGING; si RAW no produce partidas válidas o STAGING está vacío mientras DW tiene hechos, el proceso se detiene/conserva la última carga en vez de borrar los datos existentes.
 3. **Alcance competitivo y calidad:** todos los KPI filtran clasificatorias Solo/Duo (`queue_id=420`). Las partidas menores de cinco minutos se descartan como remakes. Las horas y fechas se convierten a `America/Santiago` antes de agrupar.
-4. **Muestras pequeñas:** KPI 1, 2, 3 y 5 requieren al menos 10 partidas/participaciones para asignar puntaje, nota o clasificación. KPI 2 se presenta en bloques de cuatro horas y se compara con el winrate global del jugador. En KPI 4, la alerta de actividad sigue desde 7 partidas en el día; el winrate diario solo se informa desde 10.
-5. **Puntaje compuesto de KPI 1:** se añadió la ponderación de winrate (60%), KDA normalizado a 100 al llegar a KDA 5 (25%) y cantidad de partidas normalizada a 100 al llegar a 50 (15%). `cumple_meta` conserva la regla separada de winrate > 55%.
+4. **Muestras pequeñas:** KPI 1 muestra un puntaje exploratorio desde 3 partidas, marca 3–4 como muestra corta y evalúa la meta desde 5. KPI 2, 3 y 5 conservan su mínimo de 10 partidas/participaciones. KPI 2 se presenta en bloques de cuatro horas y se compara con el winrate global del jugador. En KPI 4, la alerta de actividad sigue desde 7 partidas en el día; el winrate diario solo se informa desde 10.
+5. **Puntaje compuesto de KPI 1:** se añadió la ponderación de winrate (60%), KDA normalizado a 100 al llegar a KDA 5 (25%) y cantidad de partidas normalizada a 100 al llegar a 50 (15%). El puntaje exploratorio parte de 3; `cumple_meta` conserva la regla separada de winrate > 55% desde 5 partidas.
 6. **Calificación por rol de KPI 3:** se normalizan dos factores por rol entre 0 y 1 y se calcula `1 + 6 × promedio(factor1, factor2)`. Las referencias actuales están listadas en KPI 3 y son provisionales. JG usa `dragonKills + baronKills` del jugador como aproximación individual, no el total del equipo.
 7. **KPI 5 y parche:** se calcula sobre los participantes de las partidas recolectadas y se agrupa por campeón, rol y parche (`gameVersion`), con umbral >52% y mínimo 10 participaciones. Se clasifica como **«Destacado en la muestra»**; no se identifica OTP ni se afirma que la muestra represente todo LAS.
 
