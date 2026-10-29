@@ -120,9 +120,16 @@ Para cumplir con los estándares de seguridad y flexibilidad de la rúbrica:
 * *(Opcional)* `riot_target_players`: Lista JSON personalizada de jugadores a monitorear:
   ```json
   [
-    {"gameName": "Agusbob55555", "tagLine": "Yuyos"},
-    {"gameName": "Tonoto", "tagLine": "AXEL"},
-    {"gameName": "Unforgiven Teemo", "tagLine": "3243"}
+    {"gameName": "Frikz", "tagLine": "xoro"},
+    {"gameName": "Doctor Congo", "tagLine": "SNBK"},
+    {"gameName": "The UnfallenHero", "tagLine": "SNBK"},
+    {"gameName": "DOCTOR SOLIDO", "tagLine": "SNBK"},
+    {"gameName": "Tomoko Kuroki", "tagLine": "Kuro"},
+    {"gameName": "Sajor", "tagLine": "FGC"},
+    {"gameName": "Michael Kaiser", "tagLine": "10皇帝"},
+    {"gameName": "Janemba", "tagLine": "0001"},
+    {"gameName": "Gordo Y Cabezon", "tagLine": "Tomm"},
+    {"gameName": "Clarissaa", "tagLine": "LAS1"}
   ]
   ```
 
@@ -147,7 +154,7 @@ Cada DAG mantiene total independencia y tolerancia a fallas:
 
 ### Muestra y consulta de campeones por jugador (HU-01)
 
-La variable `riot_target_players` admite hasta 50 jugadores. En cada ejecución, el DAG de partidas consulta hasta 50 IDs Solo/Duo (`queue_id=420`) por PUUID, en páginas de 20 y avanzando `start` hasta completar la muestra o agotar el historial. Para una ejecución manual se puede limitar la cantidad con la configuración del DAG Run, por ejemplo `{"max_partidas_por_jugador": 20}`; el valor permitido es de 1 a 50. `count` sigue disponible como alias para configuraciones antiguas. El límite se aplica a cada ejecución; las partidas únicas ya cargadas se conservan en la base.
+La variable `riot_target_players` admite hasta 50 jugadores y define la cohorte tanto para el DAG de perfiles como para el DAG de partidas. En cada ejecución, el DAG de partidas consulta hasta 100 IDs Solo/Duo (`queue_id=420`) por PUUID, en páginas de 20 y avanzando `start` hasta completar la muestra o agotar el historial. Para una ejecución manual se puede limitar la cantidad con la configuración del DAG Run, por ejemplo `{"max_partidas_por_jugador": 20}`; el valor permitido es de 1 a 100. `count` sigue disponible como alias para configuraciones antiguas. El límite se aplica a cada ejecución; las partidas únicas ya cargadas se conservan en la base. Cada detalle de partida aporta sus participantes a los KPI agregados, aunque solo se consulta el historial de los Riot ID incluidos en la cohorte.
 
 Para consultar campeones, el archivo `sql/02_consulta_kpi_01_jugador.sql` viene configurado para `Frikz#xoro`; edita el Riot ID si quieres consultar otro jugador y el rol opcional si quieres filtrar. Dejar el rol vacío para incluir todos, o indicar `TOP`, `JUNGLE`, `MIDDLE`, `BOTTOM` o `UTILITY`. Desde 3 partidas la consulta muestra candidatos exploratorios y los ordena por puntaje compuesto; con 3 o 4 quedan como `MUESTRA CORTA` y `cumple_meta` es nulo. Desde 5 partidas se evalúa si el winrate supera el 55%. Ejecutarla después de calcular los KPI:
 

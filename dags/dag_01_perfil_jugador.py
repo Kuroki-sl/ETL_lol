@@ -7,6 +7,7 @@ from airflow.models import Variable
 from etl_lol_utils import (
     DEFAULT_AMERICAS_URL,
     DEFAULT_LAS_URL,
+    DEFAULT_TARGET_PLAYERS,
     validar_estado_api,
     extract_perfiles_riot,
     transform_and_load_staging_jugador,
@@ -22,14 +23,6 @@ default_args = {
     "execution_timeout": timedelta(minutes=10),
     "on_failure_callback": on_dag_failure_callback,
 }
-
-#jugadores por defecto si no estan definidos en Airflow Variables (Challengers activos LAS)
-DEFAULT_TARGET_PLAYERS = [
-    {"gameName": "Agusbob55555", "tagLine": "Yuyos"},
-    {"gameName": "Tonoto", "tagLine": "AXEL"},
-    {"gameName": "Unforgiven Teemo", "tagLine": "3243"}
-]
-
 
 @dag(
     dag_id="dag_01_perfil_jugador",

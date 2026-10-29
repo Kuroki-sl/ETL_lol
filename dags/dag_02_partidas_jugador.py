@@ -1,10 +1,12 @@
 import time
+import json
 from datetime import datetime, timedelta
 from airflow.decorators import dag, task
 from airflow.models import Variable
 
 from etl_lol_utils import (
     DEFAULT_AMERICAS_URL,
+    DEFAULT_TARGET_PLAYERS,
     validar_estado_api,
     extraer_partidas_riot,
     contar_participaciones_raw_partidas,
@@ -18,7 +20,7 @@ default_args = {
     "owner": "equipo_lol_analytics",
     "retries": 3,
     "retry_delay": timedelta(seconds=20),
-    "execution_timeout": timedelta(minutes=15),
+    "execution_timeout": timedelta(minutes=60),
     "on_failure_callback": on_dag_failure_callback,
 }
 
@@ -51,13 +53,19 @@ def partidas_jugador_etl():
         """
         americas_url = Variable.get("riot_api_base_americas", default_var=DEFAULT_AMERICAS_URL)
         api_key = Variable.get("riot_api_key", default_var=None)
+        players_json = Variable.get("riot_target_players", default_var=None)
+        target_players = json.loads(players_json) if players_json else DEFAULT_TARGET_PLAYERS
+        target_riot_ids = [
+            f"{player['gameName']}#{player['tagLine']}"
+            for player in target_players
+        ]
 
         # Parámetros pasados en DAG Run (ej. backfill)
         dag_run_conf = context.get("dag_run").conf or {} if context.get("dag_run") else {}
         # count se conserva como alias para DAG Runs creados con la configuración anterior.
         max_partidas_por_jugador = dag_run_conf.get(
             "max_partidas_por_jugador",
-            dag_run_conf.get("count", 50)
+            dag_run_conf.get("count", 100)
         )
         start_time = dag_run_conf.get("start_time", None)
         end_time = dag_run_conf.get("end_time", None)
@@ -68,7 +76,8 @@ def partidas_jugador_etl():
             max_partidas_por_jugador=max_partidas_por_jugador,
             start_time=start_time,
             end_time=end_time,
-            americas_url=americas_url
+            americas_url=americas_url,
+            riot_ids=target_riot_ids,
         )
 
         return {"partidas_nuevas": nuevas_cargadas, "t_inicio": t_inicio}

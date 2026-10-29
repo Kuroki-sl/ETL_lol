@@ -35,8 +35,9 @@ Las prioridades indican urgencia: **P0** bloquea la entrega o un requisito de pa
 
 **Responsable vertical sugerido:** Joaquín (integrante A). Sergio y Juan revisan la integración completa.
 
-- [ ] **P0** Ratificar con el equipo el tamaño configurado como máximo operativo: hasta 50 jugadores y 50 partidas Solo/Duo por PUUID en cada ejecución, sujeto a los límites de Riot y al tiempo disponible.
-- [x] **P0** Completar la paginación `start`/`count`; consulta páginas de 20 hasta un máximo de 50 partidas por jugador en cada ejecución.
+- [x] **P0** Definir el máximo operativo de extracción: hasta 50 jugadores y 100 partidas Solo/Duo por PUUID en cada ejecución, sujeto a los límites de Riot y al tiempo disponible.
+- [x] **P0** Completar la paginación `start`/`count`; consulta páginas de 20 hasta un máximo de 100 partidas por jugador en cada ejecución.
+- [x] **P0** Agregar cinco cuentas Diamante de LAS y limitar Match-V5 a los diez Riot ID de la cohorte activa.
 - [x] **P1** Seguir un PUUID de Riot desde la extracción hasta una fila del KPI 1 en `mart`; 20 partidas de trazabilidad confirmaron el mismo PUUID en el payload RAW.
 - [x] **P1** Preparar la consulta SQL que recibe el nombre del jugador y un rol opcional, excluye muestras bajo el mínimo y ordena por `puntaje_compuesto`.
 - [x] **P1** Acordar y documentar los umbrales del KPI 1: puntaje exploratorio desde 3 partidas, `MUESTRA CORTA` entre 3 y 4, y evaluación de `cumple_meta` desde 5.

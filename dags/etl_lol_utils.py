@@ -6,7 +6,7 @@ from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 import requests
 import pandas as pd
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, text, bindparam
 
 #logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -17,9 +17,22 @@ DEFAULT_AMERICAS_URL = "https://americas.api.riotgames.com"
 DEFAULT_LAS_URL = "https://la2.api.riotgames.com"
 QUEUE_RANKED_SOLO_DUO = 420
 MAX_TARGET_PLAYERS = 50
-MAX_MATCHES_PER_PLAYER = 50
+MAX_MATCHES_PER_PLAYER = 100
 MATCH_ID_PAGE_SIZE = 20
 CHILE_TIMEZONE = ZoneInfo("America/Santiago")
+
+DEFAULT_TARGET_PLAYERS = [
+    {"gameName": "Frikz", "tagLine": "xoro"},
+    {"gameName": "Doctor Congo", "tagLine": "SNBK"},
+    {"gameName": "The UnfallenHero", "tagLine": "SNBK"},
+    {"gameName": "DOCTOR SOLIDO", "tagLine": "SNBK"},
+    {"gameName": "Tomoko Kuroki", "tagLine": "Kuro"},
+    {"gameName": "Sajor", "tagLine": "FGC"},
+    {"gameName": "Michael Kaiser", "tagLine": "10皇帝"},
+    {"gameName": "Janemba", "tagLine": "0001"},
+    {"gameName": "Gordo Y Cabezon", "tagLine": "Tomm"},
+    {"gameName": "Clarissaa", "tagLine": "LAS1"},
+]
 
 
 #conexion a DB y auditoria
@@ -547,11 +560,12 @@ def load_dw_dim_jugador():
 
 #pipeline#2 historial de partidas (Match-V5)
 
-def extraer_partidas_riot(api_key, puuids=None, max_partidas_por_jugador=50,
+def extraer_partidas_riot(api_key, puuids=None, max_partidas_por_jugador=100,
                           start_time=None, end_time=None, americas_url=DEFAULT_AMERICAS_URL,
-                          page_size=MATCH_ID_PAGE_SIZE):
+                          page_size=MATCH_ID_PAGE_SIZE, riot_ids=None):
     """
-    Obtiene IDs de partidas para los PUUIDs indicados (o los presentes en dw.dim_jugador),
+    Obtiene IDs de partidas para los PUUIDs indicados, los Riot IDs seleccionados,
+    o los perfiles con nombre presentes en staging/dw si no se indica una muestra,
     verifica cuáles ya existen en raw.raw_partidas para no repetir peticiones innecesarias,
     pagina el historial hasta el máximo por jugador y descarga los detalles JSON nuevos.
     """
@@ -568,9 +582,43 @@ def extraer_partidas_riot(api_key, puuids=None, max_partidas_por_jugador=50,
     engine = get_db_engine()
     ensure_analytics_schema(engine)
 
-    # La dimensión también contiene participantes de partidas con nombre provisional.
-    # Solo se consultan perfiles reales de staging y dimensiones con Riot ID conocido.
-    if not puuids:
+    # Si se entrega una cohorte explícita, resuelve solo sus PUUIDs desde el historial
+    # de perfiles. Esto evita incluir cuentas nombradas de ejecuciones anteriores.
+    if riot_ids is not None:
+        riot_ids = list(dict.fromkeys(
+            str(riot_id).strip().lower()
+            for riot_id in riot_ids
+            if riot_id and str(riot_id).strip()
+        ))
+        if riot_ids:
+            query_perfiles_objetivo = text("""
+                SELECT DISTINCT ON (LOWER(riot_id))
+                    LOWER(riot_id) AS riot_id_normalizado,
+                    puuid
+                FROM raw.raw_perfil_jugador
+                WHERE LOWER(riot_id) IN :riot_ids
+                  AND puuid IS NOT NULL
+                ORDER BY LOWER(riot_id), fecha_extraccion DESC;
+            """).bindparams(bindparam("riot_ids", expanding=True))
+            with engine.connect() as conn:
+                res = conn.execute(query_perfiles_objetivo, {"riot_ids": riot_ids})
+                perfiles_objetivo = res.fetchall()
+
+            puuids = [row[1] for row in perfiles_objetivo]
+            riot_ids_encontrados = {row[0] for row in perfiles_objetivo}
+            riot_ids_faltantes = [
+                riot_id for riot_id in riot_ids if riot_id not in riot_ids_encontrados
+            ]
+            if riot_ids_faltantes:
+                logger.warning(
+                    "No hay perfil cargado para estos Riot ID; ejecuta primero "
+                    "dag_01_perfil_jugador: %s",
+                    ", ".join(riot_ids_faltantes),
+                )
+        else:
+            puuids = []
+    # Compatibilidad para llamadas sin cohorte explícita: perfiles reales registrados.
+    elif not puuids:
         with engine.connect() as conn:
             res = conn.execute(text("""
                 SELECT puuid FROM staging.stg_jugador

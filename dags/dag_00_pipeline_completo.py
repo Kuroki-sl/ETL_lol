@@ -6,7 +6,7 @@ default_args = {
     "owner": "equipo_lol_analytics",
     "retries": 1,
     "retry_delay": timedelta(seconds=15),
-    "execution_timeout": timedelta(minutes=30),
+    "execution_timeout": timedelta(minutes=90),
 }
 
 
