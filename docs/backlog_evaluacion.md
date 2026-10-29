@@ -65,10 +65,24 @@ La consulta actual encuentra 122 partidas Solo/Duo únicas en RAW donde aparece 
 **Responsable vertical sugerido:** Sergio (integrante B). Joaquín y Juan revisan la integración completa.
 
 - [x] **P0** Resolver la diferencia de definición del KPI 2: el código agrupa en bloques de cuatro horas y la propuesta conceptual habla de horas individuales. Alinear SQL, README e informe.
-- [ ] **P1** Seguir `gameCreation` desde Match-V5 a hora/fecha de Chile en `dw.dim_tiempo` y comprobar la agrupación seleccionada.
-- [ ] **P1** Verificar que el KPI 2 compare el winrate de la franja con el winrate global del mismo jugador y no recomiende muestras bajo el mínimo de 10 partidas.
-- [ ] **P1** Verificar el KPI 4 de punta a punta: actividad diaria, alerta desde 7 partidas y winrate diario solo desde 10.
-- [ ] **P1** Preparar consultas SQL y capturas de resultados para ambos KPI.
+- [x] **P1** Seguir `gameCreation` desde Match-V5 a hora/fecha de Chile en `dw.dim_tiempo` y comprobar la agrupación seleccionada.
+- [x] **P1** Verificar que el KPI 2 compare el winrate de la franja con el winrate global del mismo jugador y no recomiende muestras bajo el mínimo de 10 partidas.
+- [x] **P1** Verificar el KPI 4 de punta a punta: actividad diaria, alerta desde 7 partidas y winrate diario solo desde 5.
+- [x] **P1** Preparar consultas SQL y capturas de resultados para ambos KPI.
+
+#### Evidencia del avance
+
+La consulta de HU-02 para `Frikz#xoro` devuelve los siguientes resultados por bloque horario (KPI 2) frente a su winrate global de 53,45%:
+
+| Bloque Horario | Franja Local Chile | Partidas | Victorias | Winrate Bloque | Dif. vs Global | Clasificación / Recomendación |
+| :---: | :--- | :---:| :---:| :---:| :---:| :--- |
+| `16-19` | Tarde / Noche temprana (16:00 a 19:59) | 18 | 11 | 61,11% | +7,66% | `FRANJA FAVORABLE EN MUESTRA` |
+| `00-03` | Madrugada (00:00 a 03:59) | 14 | 9 | 64,29% | +10,84% | `FRANJA FAVORABLE EN MUESTRA` |
+| `20-23` | Noche (20:00 a 23:59) | 81 | 41 | 50,62% | -2,83% | `BAJO PROMEDIO PERSONAL` |
+| `12-15` | Mediodía / Tarde temprana (12:00 a 15:59) | 2 | 1 | 50,00% | -3,45% | `MUESTRA INSUFICIENTE` |
+| `04-07` | Temprano (04:00 a 07:59) | 1 | 0 | 0,00% | -53,45% | `MUESTRA INSUFICIENTE` |
+
+En actividad diaria (KPI 4), se corroboraron alertas de sobrecarga (≥ 7 partidas) en jugadores con sesiones intensivas (ej. Michael Kaiser con 14 partidas y 6,03 hrs en un día; Gordo Y Cabezon con 13 partidas y 5,76 hrs). El winrate diario solo se evalúa al alcanzar 5 partidas. La trazabilidad temporal confirmó la conversión desde `gameCreation` UTC hacia la hora local `America/Santiago` en `dw.dim_tiempo` sin remakes. Más detalles en [`docs/avance_hu02.md`](avance_hu02.md) y [`sql/03_consulta_kpi_02_04_horario_actividad.sql`](../sql/03_consulta_kpi_02_04_horario_actividad.sql).
 
 **Criterio de término:** horario y fecha usan la zona `America/Santiago`; las consultas muestran partidas y tamaño de muestra, y el informe explica la interpretación sin afirmar causalidad.
 

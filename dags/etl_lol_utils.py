@@ -1273,7 +1273,7 @@ def calcular_kpis_mart(min_partidas_kpi1=3, min_partidas_kpi1_adecuada=5,
             COUNT(*)::INT AS partidas_en_el_dia,
             ROUND((SUM(f.duracion_min) / 60.0)::NUMERIC, 2) AS horas_jugadas_dia,
             CASE
-                WHEN COUNT(*) >= 10 THEN
+                WHEN COUNT(*) >= 5 THEN
                     ROUND((SUM(CASE WHEN f.victoria THEN 1 ELSE 0 END)::NUMERIC / COUNT(*)) * 100, 2)
                 ELSE NULL
             END AS winrate_del_dia,
