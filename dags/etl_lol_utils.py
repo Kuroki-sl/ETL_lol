@@ -217,8 +217,10 @@ def get_riot_headers(api_key=None):
 
 def request_riot_api(url, headers, timeout=15, max_retries=3):
     """
-    Realiza peticiones HTTP GET a Riot API con reintentos y manejo de Rate Limits (HTTP 429).
+    Realiza peticiones HTTP GET a Riot API con reintentos, manejo de Rate Limits (HTTP 429)
+    y reintentos ante errores temporales de servidor (HTTP 5xx) y fallas de red.
     """
+    ultimo_error = None
     for intento in range(1, max_retries + 1):
         try:
             response = requests.get(url, headers=headers, timeout=timeout)
@@ -227,12 +229,18 @@ def request_riot_api(url, headers, timeout=15, max_retries=3):
 
             if response.status_code == 429:
                 retry_after = int(response.headers.get("Retry-After", 5))
-                logger.warning(f"[RATE LIMIT 429] Esperando {retry_after} segundos antes de reintentar...")
+                ultimo_error = f"HTTP 429 Rate Limit en {url}"
+                logger.warning(
+                    f"[RATE LIMIT 429] Intento {intento}/{max_retries} en {url}. "
+                    f"Esperando {retry_after} segundos antes de reintentar..."
+                )
+                if intento == max_retries:
+                    raise RuntimeError(f"[HTTP 429] Límite de consultas excedido tras {max_retries} intentos: {url}")
                 time.sleep(retry_after + 1)
                 continue
 
             if response.status_code in [401, 403]:
-                error_msg = f"[HTTP {response.status_code}] Clave de API Riot inválida o expirada."
+                error_msg = f"[HTTP {response.status_code}] Clave de API Riot inválida o expirada al consultar: {url}"
                 logger.error(error_msg)
                 raise PermissionError(error_msg)
 
@@ -240,41 +248,69 @@ def request_riot_api(url, headers, timeout=15, max_retries=3):
                 logger.warning(f"[HTTP 404] Recurso no encontrado: {url}")
                 return None
 
+            if 500 <= response.status_code < 600:
+                espera = 3 * intento
+                ultimo_error = f"HTTP {response.status_code} Error de servidor en {url}"
+                logger.warning(
+                    f"[ERROR SERVIDOR 5xx] HTTP {response.status_code} en intento {intento}/{max_retries} "
+                    f"para {url}. Reintentando en {espera} segundos..."
+                )
+                if intento == max_retries:
+                    response.raise_for_status()
+                time.sleep(espera)
+                continue
+
+            logger.error(f"[HTTP {response.status_code}] Error HTTP no recuperable al consultar: {url}")
             response.raise_for_status()
 
         except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as net_err:
-            logger.warning(f"[ERROR RED] Intento {intento}/{max_retries} falló para {url}: {net_err}")
+            tipo_err = type(net_err).__name__
+            ultimo_error = f"{tipo_err}: {net_err}"
+            logger.warning(f"[ERROR RED - {tipo_err}] Intento {intento}/{max_retries} falló para {url}: {net_err}")
             if intento == max_retries:
                 raise
-            time.sleep(3)
+            time.sleep(3 * intento)
 
-    raise RuntimeError(f"Falla tras {max_retries} intentos al consultar: {url}")
+    raise RuntimeError(f"Falla tras {max_retries} intentos al consultar: {url}. Último error: {ultimo_error}")
 
 
 def validar_estado_api(base_url, api_key):
     """
     Validación previa de la API antes de extraer (criterio de rúbrica).
-    Consulta el estado del servidor LAS o la API de cuentas.
+    Consulta el estado del servidor LAS o la API de cuentas y falla explícitamente
+    ante errores 401/403, 429, 5xx o códigos HTTP inesperados.
     """
     headers = get_riot_headers(api_key)
-    # Si base_url es americas, usamos endpoint de cuentas; de lo contrario status de LAS
-    if "americas" in base_url:
-        url = f"{base_url}/riot/account/v1/accounts/by-riot-id/Faker/KR1"
+    base_clean = (base_url or DEFAULT_AMERICAS_URL).rstrip("/")
+    # Si base_url es americas, usamos endpoint de cuentas; de lo contrario status de la plataforma indicada
+    if "americas" in base_clean:
+        url = f"{base_clean}/riot/account/v1/accounts/by-riot-id/Faker/KR1"
+        codigos_validos = (200, 404)
     else:
-        url = f"{DEFAULT_LAS_URL}/lol/status/v4/platform-data"
+        url = f"{base_clean}/lol/status/v4/platform-data"
+        codigos_validos = (200,)
 
     try:
         resp = requests.get(url, headers=headers, timeout=10)
-        if resp.status_code in [200, 404]:
-            # 200 (éxito) o 404 (cuenta no encontrada pero token válido y aceptado)
-            logger.info("[HEALTH CHECK] API de Riot responde y token es válido.")
+        if resp.status_code in codigos_validos:
+            logger.info(f"[HEALTH CHECK] API de Riot disponible (HTTP {resp.status_code}) y token válido.")
             return True
-        elif resp.status_code in [401, 403]:
-            raise PermissionError(f"[HEALTH CHECK FALLÓ] API Key rechazada por Riot Games (HTTP {resp.status_code} - Token inválido o expirado).")
-        else:
-            logger.warning(f"[HEALTH CHECK] Código de respuesta: {resp.status_code}")
-            return True
-            return True
+        if resp.status_code in [401, 403]:
+            raise PermissionError(
+                f"[HEALTH CHECK FALLÓ] API Key rechazada por Riot Games "
+                f"(HTTP {resp.status_code} - Token inválido o expirado)."
+            )
+        if resp.status_code == 429:
+            raise RuntimeError(
+                f"[HEALTH CHECK FALLÓ] Rate limit activo en Riot Games (HTTP 429) al validar: {url}"
+            )
+        if 500 <= resp.status_code < 600:
+            raise RuntimeError(
+                f"[HEALTH CHECK FALLÓ] Error de servidor en Riot Games (HTTP {resp.status_code}) al validar: {url}"
+            )
+        raise RuntimeError(
+            f"[HEALTH CHECK FALLÓ] Código de respuesta inesperado (HTTP {resp.status_code}) al validar: {url}"
+        )
     except Exception as e:
         logger.error(f"[HEALTH CHECK EXCEPCIÓN] {e}")
         raise
@@ -366,17 +402,24 @@ def transform_and_load_staging_jugador():
 
     registros = []
     campos_nulos_contador = 0
+    # 7 campos esperados por jugador entre las 3 APIs (Account-V1, Summoner-V4 y League-V4):
+    # puuid, gameName, tagLine, summonerLevel, tier, rank y leaguePoints.
     total_campos_esperados = len(df_raw) * 7
 
     for _, row in df_raw.iterrows():
         puuid = row["puuid"]
-        acc = row["payload_account"] or {}
-        summ = row["payload_summoner"] or {}
-        leagues = row["payload_league"] or []
+        acc = row["payload_account"] if isinstance(row["payload_account"], dict) else {}
+        summ = row["payload_summoner"] if isinstance(row["payload_summoner"], dict) else {}
+        raw_leagues = row["payload_league"]
+        leagues = raw_leagues if isinstance(raw_leagues, list) else []
 
-        game_name = acc.get("gameName", "Desconocido")
-        tag_line = acc.get("tagLine", "LAS")
-        summoner_level = summ.get("summonerLevel", 1)
+        raw_game_name = acc.get("gameName")
+        raw_tag_line = acc.get("tagLine")
+        raw_summoner_level = summ.get("summonerLevel")
+
+        game_name = raw_game_name if raw_game_name not in (None, "") else "Desconocido"
+        tag_line = raw_tag_line if raw_tag_line not in (None, "") else "LAS"
+        summoner_level = raw_summoner_level if raw_summoner_level is not None else 1
 
         # Buscar clasificación SoloQ (RANKED_SOLO_5x5) o tomar la primera
         tier = "UNRANKED"
@@ -385,16 +428,37 @@ def transform_and_load_staging_jugador():
         wins = 0
         losses = 0
 
-        if isinstance(leagues, list) and len(leagues) > 0:
-            soloq = next((l for l in leagues if l.get("queueType") == "RANKED_SOLO_5x5"), leagues[0])
-            tier = soloq.get("tier", "UNRANKED")
-            rank_division = soloq.get("rank", "N/A")
-            lp = soloq.get("leaguePoints", 0)
-            wins = soloq.get("wins", 0)
-            losses = soloq.get("losses", 0)
+        if len(leagues) > 0:
+            soloq = next((l for l in leagues if isinstance(l, dict) and l.get("queueType") == "RANKED_SOLO_5x5"), leagues[0])
+            raw_tier = soloq.get("tier")
+            raw_rank = soloq.get("rank")
+            raw_lp = soloq.get("leaguePoints")
+            tier = raw_tier if raw_tier not in (None, "") else "UNRANKED"
+            rank_division = raw_rank if raw_rank not in (None, "") else "N/A"
+            lp = raw_lp if raw_lp is not None else 0
+            wins = soloq.get("wins", 0) if soloq.get("wins") is not None else 0
+            losses = soloq.get("losses", 0) if soloq.get("losses") is not None else 0
+            liga_valida_tier = raw_tier not in (None, "")
+            liga_valida_rank = raw_rank not in (None, "")
+            liga_valida_lp = raw_lp is not None
+        else:
+            # Si League-V4 respondió una lista vacía [], el estado UNRANKED es válido del dominio
+            # y no un dato nulo; solo es nulo si payload_league vino NULL (fallo/ausencia de respuesta).
+            league_respondio = isinstance(raw_leagues, list)
+            liga_valida_tier = league_respondio
+            liga_valida_rank = league_respondio
+            liga_valida_lp = league_respondio
 
-        if not puuid or tier == "UNRANKED":
-            campos_nulos_contador += 1
+        campos_presentes = [
+            puuid not in (None, ""),
+            raw_game_name not in (None, ""),
+            raw_tag_line not in (None, ""),
+            raw_summoner_level is not None,
+            liga_valida_tier,
+            liga_valida_rank,
+            liga_valida_lp,
+        ]
+        campos_nulos_contador += sum(1 for presente in campos_presentes if not presente)
 
         registros.append({
             "puuid": puuid,
@@ -541,11 +605,40 @@ def extraer_partidas_riot(api_key, puuids=None, count=20, start_time=None, end_t
     return partidas_nuevas_insertadas
 
 
+def contar_participaciones_raw_partidas(engine=None):
+    """
+    Cuenta el total de participaciones en partidas clasificatorias Solo/Duo (queue_id=420)
+    almacenadas en raw.raw_partidas para reportar filas_leidas en la misma unidad que dw.fact_partidas.
+    """
+    engine = engine or get_db_engine()
+    sql = text("""
+        WITH partidas_unicas AS (
+            SELECT DISTINCT ON (match_id) match_id, payload_match
+            FROM raw.raw_partidas
+            ORDER BY match_id, fecha_extraccion DESC, id_raw DESC
+        )
+        SELECT COALESCE(
+            SUM(
+                GREATEST(
+                    COALESCE(jsonb_array_length(payload_match->'info'->'participants'), 0),
+                    10
+                )
+            ),
+            0
+        )::INT
+        FROM partidas_unicas
+        WHERE NULLIF(payload_match->'info'->>'queueId', '')::INT = :queue_id;
+    """)
+    with engine.connect() as conn:
+        return int(conn.execute(sql, {"queue_id": QUEUE_RANKED_SOLO_DUO}).scalar() or 0)
+
+
 def transform_and_load_staging_partidas():
     """
     Parsea los JSON de raw.raw_partidas, normaliza métricas a snake_case,
     conserva todas las participaciones de cada partida Solo/Duo, convierte la
     hora a America/Santiago y descarta remakes (< 5 min).
+    Calcula porcentaje_nulos sobre los 10 campos esperados por participación Solo/Duo.
     """
     engine = get_db_engine()
     ensure_analytics_schema(engine)
@@ -563,6 +656,11 @@ def transform_and_load_staging_partidas():
     registros_partidas = []
     filas_invalidas = 0
     partidas_otra_cola = 0
+    # 10 campos esperados por participación Solo/Duo:
+    # puuid, fecha_y_duracion_valida, parche, campeon, rol, asesinatos, muertes, asistencias, oro_dano, victoria
+    CAMPOS_POR_PARTICIPACION = 10
+    total_campos_esperados = 0
+    campos_nulos_o_invalidos = 0
 
     for _, row in df_raw.iterrows():
         mid = row["match_id"]
@@ -580,11 +678,16 @@ def transform_and_load_staging_partidas():
             partidas_otra_cola += 1
             continue
 
+        participants = info.get("participants", [])
+        num_participantes_partida = max(len(participants), 10)
+        total_campos_esperados += num_participantes_partida * CAMPOS_POR_PARTICIPACION
+
         # Duración en minutos
         duracion_min = round(game_duration_sec / 60.0, 2)
-        # Filtro de calidad: partidas remake (< 5 min)
+        # Filtro de calidad: partidas remake (< 5 min) o sin fecha de inicio válida
         if duracion_min < 5.0 or not game_start_ms:
             filas_invalidas += 1
+            campos_nulos_o_invalidos += num_participantes_partida * CAMPOS_POR_PARTICIPACION
             continue
 
         fecha_partida = datetime.fromtimestamp(
@@ -608,15 +711,26 @@ def transform_and_load_staging_partidas():
         else:
             bloque = "20-23"
 
-        participants = info.get("participants", [])
+        if len(participants) < 10:
+            campos_nulos_o_invalidos += (10 - len(participants)) * CAMPOS_POR_PARTICIPACION
+
         for p in participants:
             p_puuid = p.get("puuid")
             if not p_puuid:
+                campos_nulos_o_invalidos += CAMPOS_POR_PARTICIPACION
                 continue
 
-            asesinatos = int(p.get("kills", 0) or 0)
-            muertes = int(p.get("deaths", 0) or 0)
-            asistencias = int(p.get("assists", 0) or 0)
+            raw_champ = p.get("championName")
+            raw_kills = p.get("kills")
+            raw_deaths = p.get("deaths")
+            raw_assists = p.get("assists")
+            raw_gold = p.get("goldEarned")
+            raw_dmg_champ = p.get("totalDamageDealtToChampions")
+            raw_win = p.get("win")
+
+            asesinatos = int(raw_kills or 0)
+            muertes = int(raw_deaths or 0)
+            asistencias = int(raw_assists or 0)
             # Si no hay muertes, se usa 1 como divisor para no penalizar un KDA perfecto.
             kda = round((asesinatos + asistencias) / max(muertes, 1), 2)
 
@@ -629,6 +743,20 @@ def transform_and_load_staging_partidas():
             elif rol == "BOTTOM":
                 rol = "ADC"
 
+            campos_validos_participante = [
+                True,  # puuid presente
+                True,  # fecha_partida y duracion_min >= 5.0 válidas
+                parche != "UNKNOWN",
+                raw_champ not in (None, ""),
+                rol != "SIN_ROL",
+                raw_kills is not None,
+                raw_deaths is not None,
+                raw_assists is not None,
+                (raw_gold is not None and raw_dmg_champ is not None),
+                raw_win is not None,
+            ]
+            campos_nulos_o_invalidos += sum(1 for valido in campos_validos_participante if not valido)
+
             registros_partidas.append({
                 "match_id": mid,
                 "puuid": p_puuid,
@@ -638,21 +766,21 @@ def transform_and_load_staging_partidas():
                 "bloque_horario": bloque,
                 "queue_id": queue_id,
                 "parche": parche,
-                "campeon": p.get("championName", "Desconocido"),
+                "campeon": raw_champ if raw_champ not in (None, "") else "Desconocido",
                 "rol": rol,
                 "asesinatos": asesinatos,
                 "muertes": muertes,
                 "asistencias": asistencias,
                 "kda": kda,
-                "oro_ganado": p.get("goldEarned", 0),
-                "dano_campeones": p.get("totalDamageDealtToChampions", 0),
+                "oro_ganado": raw_gold if raw_gold is not None else 0,
+                "dano_campeones": raw_dmg_champ if raw_dmg_champ is not None else 0,
                 "dano_torres": p.get("damageDealtToTurrets", 0) or 0,
                 # Aproximación individual para JG: dragones/barones asegurados;
                 # no se suman súbditos neutrales como si fueran objetivos épicos.
                 "objetivos_neutrales": (p.get("dragonKills", 0) or 0) + (p.get("baronKills", 0) or 0),
                 "vision": p.get("visionScore", 0) or 0,
                 "duracion_min": duracion_min,
-                "victoria": bool(p.get("win", False))
+                "victoria": bool(raw_win if raw_win is not None else False)
             })
 
     if not registros_partidas:
@@ -662,7 +790,7 @@ def transform_and_load_staging_partidas():
         )
 
     df_stg = pd.DataFrame(registros_partidas).drop_duplicates(subset=["match_id", "puuid"], keep="last")
-    pct_nulos = (filas_invalidas / max(len(df_raw), 1)) * 100
+    pct_nulos = (campos_nulos_o_invalidos / max(total_campos_esperados, 1)) * 100
 
     sql_upsert = text("""
         INSERT INTO staging.stg_partidas (
@@ -1107,3 +1235,50 @@ def calcular_kpis_mart(min_partidas_kpi1=10, min_partidas_kpi2=10,
 
     logger.info(f"[MART KPIS] Recalculados los cinco indicadores. Filas: {filas_mart}.")
     return filas_mart
+
+
+def calcular_porcentaje_nulos_mart(engine=None):
+    """
+    Calcula el porcentaje de filas en las 5 tablas de mart cuyos campos analíticos
+    principales quedaron en NULL (por ejemplo, al no alcanzar el mínimo de muestra).
+    Permite auditar dag_03_calculo_kpis con una fórmula verificable desde SQL.
+    """
+    engine = engine or get_db_engine()
+    sql = text("""
+        WITH resumen AS (
+            SELECT
+                COUNT(*)::INT AS total_filas,
+                COUNT(*) FILTER (
+                    WHERE puntaje_compuesto IS NULL OR cumple_meta IS NULL OR kda_promedio IS NULL
+                )::INT AS filas_con_nulos
+            FROM mart.kpi_01_mejores_campeones
+            UNION ALL
+            SELECT
+                COUNT(*)::INT AS total_filas,
+                0::INT AS filas_con_nulos
+            FROM mart.kpi_02_winrate_horario
+            UNION ALL
+            SELECT
+                COUNT(*)::INT AS total_filas,
+                COUNT(*) FILTER (WHERE nota_escala_1_a_7 IS NULL)::INT AS filas_con_nulos
+            FROM mart.kpi_03_calificacion_rol
+            UNION ALL
+            SELECT
+                COUNT(*)::INT AS total_filas,
+                COUNT(*) FILTER (WHERE winrate_del_dia IS NULL)::INT AS filas_con_nulos
+            FROM mart.kpi_04_control_actividad_diaria
+            UNION ALL
+            SELECT
+                COUNT(*)::INT AS total_filas,
+                COUNT(*) FILTER (WHERE kda_global IS NULL)::INT AS filas_con_nulos
+            FROM mart.kpi_05_tierlist_meta_vs_otp
+        )
+        SELECT
+            CASE
+                WHEN COALESCE(SUM(total_filas), 0) = 0 THEN 0.0
+                ELSE ROUND((SUM(filas_con_nulos)::NUMERIC / SUM(total_filas)) * 100, 2)
+            END AS pct_nulos
+        FROM resumen;
+    """)
+    with engine.connect() as conn:
+        return float(conn.execute(sql).scalar() or 0.0)

@@ -6,6 +6,7 @@ from sqlalchemy import text
 from etl_lol_utils import (
     get_db_engine,
     calcular_kpis_mart,
+    calcular_porcentaje_nulos_mart,
     registrar_auditoria,
     on_dag_failure_callback
 )
@@ -48,6 +49,7 @@ def calculo_kpis_etl():
             return {
                 "total_hechos": 0,
                 "filas_kpis": 0,
+                "pct_nulos": 0.0,
                 "t_inicio": t_inicio
             }
         filas_actualizadas = calcular_kpis_mart(
@@ -56,9 +58,11 @@ def calculo_kpis_etl():
             min_partidas_kpi3=10,
             min_partidas_kpi5=10,
         )
+        pct_nulos = calcular_porcentaje_nulos_mart()
         return {
             "total_hechos": total_hechos,
             "filas_kpis": filas_actualizadas,
+            "pct_nulos": pct_nulos,
             "t_inicio": t_inicio
         }
 
@@ -71,7 +75,7 @@ def calculo_kpis_etl():
             run_id=context["run_id"],
             filas_leidas=info_kpis.get("total_hechos", 0),
             filas_cargadas=info_kpis.get("filas_kpis", 0),
-            porcentaje_nulos=0.0,
+            porcentaje_nulos=info_kpis.get("pct_nulos", 0.0),
             duracion_seg=duracion,
             estado="SUCCESS"
         )

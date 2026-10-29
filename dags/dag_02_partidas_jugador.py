@@ -7,6 +7,7 @@ from etl_lol_utils import (
     DEFAULT_AMERICAS_URL,
     validar_estado_api,
     extraer_partidas_riot,
+    contar_participaciones_raw_partidas,
     transform_and_load_staging_partidas,
     load_dw_hechos_y_tiempo,
     registrar_auditoria,
@@ -71,8 +72,10 @@ def partidas_jugador_etl():
     def transformar_staging_partidas(info_extract: dict):
         """Parsea JSONs de raw, descarta remakes (< 5m), tipifica y normaliza métricas."""
         stg_count, pct_invalidas = transform_and_load_staging_partidas()
+        participaciones_leidas = max(contar_participaciones_raw_partidas(), stg_count)
         return {
             "filas_staging": stg_count,
+            "participaciones_leidas": participaciones_leidas,
             "pct_nulos": pct_invalidas,
             "t_inicio": info_extract["t_inicio"],
             "partidas_nuevas": info_extract["partidas_nuevas"]
@@ -100,7 +103,7 @@ def partidas_jugador_etl():
         registrar_auditoria(
             dag_name=context["dag"].dag_id,
             run_id=context["run_id"],
-            filas_leidas=info_final.get("partidas_nuevas", 0),
+            filas_leidas=info_final.get("participaciones_leidas", info_final.get("partidas_nuevas", 0)),
             filas_cargadas=info_final.get("dw_filas", 0),
             porcentaje_nulos=info_final.get("pct_nulos", 0.0),
             duracion_seg=duracion,

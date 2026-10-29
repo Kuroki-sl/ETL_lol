@@ -103,10 +103,14 @@ def perfil_jugador_etl():
     def registrar_auditoria_task(info_final: dict, **context):
         """Registra métricas en public.etl_audit."""
         duracion = time.time() - info_final.get("t_inicio", time.time())
+        filas_leidas = max(
+            info_final.get("filas_staging", 0),
+            info_final.get("filas_raw", 0)
+        )
         registrar_auditoria(
             dag_name=context["dag"].dag_id,
             run_id=context["run_id"],
-            filas_leidas=info_final.get("filas_raw", 0),
+            filas_leidas=filas_leidas,
             filas_cargadas=info_final.get("dw_filas", 0),
             porcentaje_nulos=info_final.get("pct_nulos", 0.0),
             duracion_seg=duracion,
