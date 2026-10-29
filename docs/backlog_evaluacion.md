@@ -17,14 +17,13 @@ Las prioridades indican urgencia: **P0** bloquea la entrega o un requisito de pa
 - Docker Compose con Airflow y PostgreSQL; DDL con capas `raw`, `staging`, `dw` y `mart`.
 - DAG de perfiles (Account-V1, Summoner-V4 y League-V4), DAG de partidas (Match-V5), DAG de KPI y DAG maestro.
 - Cinco KPI, filtro Solo/Duo, conversión horaria a Chile, KDA con divisor mínimo 1, umbrales de muestra y tablas de auditoría.
-- HU-01 implementada y validada en Docker: extracción paginada de hasta 50 partidas por jugador, consulta por Riot ID/rol y umbrales del KPI 1 acordados en 3 y 5 partidas.
+- HU-01 implementada y validada en Docker: cohorte activa de 10 Riot ID, extracción paginada de hasta 100 partidas Solo/Duo por Riot ID, consulta por jugador/rol y umbrales del KPI 1 acordados en 3 y 5 partidas.
+- Match-V5 incorpora las participaciones de todos los jugadores presentes en las partidas de la cohorte; el historial en `raw` y `dw` se conserva de forma acumulativa.
 - Scripts para respaldar/restaurar PostgreSQL y flujo de Drive web documentado.
 
 ### Pendientes confirmados al revisar el repo
 
-- Falta ratificar con el equipo el límite operativo de hasta 50 jugadores y 50 IDs Solo/Duo por PUUID en cada ejecución; la retención en la base sigue siendo acumulativa.
 - El DAG maestro es secuencial: si falla un DAG hijo, no continúa a la siguiente etapa. El DAG programado de partidas tampoco dispara automáticamente el DAG de KPI.
-- El pre-chequeo de API puede aceptar errores 5xx; `porcentaje_nulos` no mide nulos de forma consistente.
 - Aún faltan en el repo el informe PDF, la presentación y el ZIP final con evidencias.
 
 ## Historias de usuario
@@ -38,22 +37,24 @@ Las prioridades indican urgencia: **P0** bloquea la entrega o un requisito de pa
 - [x] **P0** Definir el máximo operativo de extracción: hasta 50 jugadores y 100 partidas Solo/Duo por PUUID en cada ejecución, sujeto a los límites de Riot y al tiempo disponible.
 - [x] **P0** Completar la paginación `start`/`count`; consulta páginas de 20 hasta un máximo de 100 partidas por jugador en cada ejecución.
 - [x] **P0** Agregar cinco cuentas Diamante de LAS y limitar Match-V5 a los diez Riot ID de la cohorte activa.
-- [x] **P1** Seguir un PUUID de Riot desde la extracción hasta una fila del KPI 1 en `mart`; 20 partidas de trazabilidad confirmaron el mismo PUUID en el payload RAW.
+- [x] **P1** Seguir un PUUID de Riot desde la extracción hasta `mart`; en la carga actual se observan 122 partidas Solo/Duo únicas en RAW con el PUUID de Frikz.
 - [x] **P1** Preparar la consulta SQL que recibe el nombre del jugador y un rol opcional, excluye muestras bajo el mínimo y ordena por `puntaje_compuesto`.
 - [x] **P1** Acordar y documentar los umbrales del KPI 1: puntaje exploratorio desde 3 partidas, `MUESTRA CORTA` entre 3 y 4, y evaluación de `cumple_meta` desde 5.
 - [x] **P1** Guardar evidencia del resultado: jugador, rol, partidas consideradas, campeón recomendado y fórmula aplicada.
 
 #### Evidencia del avance
 
-La consulta de HU-01 para `Frikz#xoro` devuelve, entre otros, estos resultados:
+La consulta de HU-01 para `Frikz#xoro`, después de ampliar la extracción a 100, devuelve estos resultados actuales:
 
-| Campeón | Rol | Partidas | Winrate | Estado de muestra | `cumple_meta` |
-|---|---|---:|---:|---|---|
-| Ekko | JUNGLE | 3 | 100,00% | `MUESTRA CORTA` | Sin evaluar |
-| Syndra | MIDDLE | 4 | 75,00% | `MUESTRA CORTA` | Sin evaluar |
-| Locke | MIDDLE | 5 | 60,00% | `MINIMO DE MUESTRA ALCANZADO` | Sí |
+| Campeón | Rol | Partidas | Victorias | Winrate | Puntaje | Estado de muestra | `cumple_meta` |
+|---|---|---:|---:|---:|---:|---|---|
+| Ekko | MIDDLE | 8 | 7 | 87,50% | 74,20 | `MINIMO DE MUESTRA ALCANZADO` | Sí |
+| Locke | MIDDLE | 7 | 5 | 71,43% | 59,56 | `MINIMO DE MUESTRA ALCANZADO` | Sí |
+| Ashe | ADC | 3 | 2 | 66,67% | 53,15 | `MUESTRA CORTA` | Sin evaluar |
+| Ahri | MIDDLE | 3 | 2 | 66,67% | 53,00 | `MUESTRA CORTA` | Sin evaluar |
+| Ekko | JUNGLE | 8 | 5 | 62,50% | 50,45 | `MINIMO DE MUESTRA ALCANZADO` | Sí |
 
-La consulta de trazabilidad listó 20 partidas y confirmó `puuid_presente_en_payload = true` para cada una. El recálculo produjo 13.167 filas en los cinco marts; Airflow no reportó errores de importación y los servicios de Docker Compose quedaron saludables. La fórmula del puntaje (winrate 60%, KDA 25% y volumen 15%) y los umbrales están en [la definición de indicadores](indicadores_etl_riot_games.md) y [la consulta HU-01](../sql/02_consulta_kpi_01_jugador.sql).
+La consulta actual encuentra 122 partidas Solo/Duo únicas en RAW donde aparece el PUUID de Frikz. El límite de 100 se aplica a las partidas solicitadas por cada Riot ID objetivo; una partida solicitada para otro jugador de la cohorte también aporta las participaciones de Frikz y de los demás jugadores al DW/KPI. La carga es acumulativa. Conteos actuales: RAW 970, DW 9.070; marts: KPI 1 7.910, KPI 2 7.256, KPI 3 6.979, KPI 4 8.029 y KPI 5 3.994. La fórmula del puntaje (winrate 60%, KDA 25% y volumen 15%) y los umbrales están en [la definición de indicadores](indicadores_etl_riot_games.md) y [la consulta HU-01](../sql/02_consulta_kpi_01_jugador.sql).
 
 **Criterio de término:** una persona puede consultar el KPI 1 con nombre/rol y rastrear el resultado hasta las partidas guardadas, sin duplicar participaciones.
 
@@ -91,11 +92,11 @@ La consulta de trazabilidad listó 20 partidas y confirmó `puuid_presente_en_pa
 
 **Responsable de coordinación sugerido:** rotativo entre Joaquín, Sergio y Juan; los tres integran y revisan el cambio porque afecta las tres historias.
 
-- [ ] **P0** Corregir el chequeo de API para que estados 5xx/inesperados fallen en vez de marcar la API como disponible.
-- [ ] **P1** Completar reintentos y registro de errores HTTP; el código ya contempla red y 429, pero no reintenta todos los errores 5xx.
+- [x] **P0** Corregir el chequeo de API para que estados 5xx/inesperados fallen en vez de marcar la API como disponible.
+- [x] **P1** Completar reintentos y registro de errores HTTP: 429 respeta `Retry-After`; 5xx y fallas de red se reintentan hasta tres veces.
 - [ ] **P0** Cambiar la orquestación: hoy `dag_00_pipeline_completo` espera éxito de cada hijo; definir cómo sigue la otra fuente y cuándo se permite calcular KPI con carga parcial.
 - [ ] **P1** Disparar el cálculo de KPI después de una carga programada exitosa de partidas y aclarar los schedules/backfill.
-- [ ] **P0** Calcular correctamente los nulos/errores por DAG; el KPI registra 0% fijo y el perfil cuenta `UNRANKED` como aproximación de nulos.
+- [x] **P0** Calcular los nulos de perfiles, participaciones y marts sobre campos analíticos definidos y registrar el porcentaje en auditoría.
 - [ ] **P0** Demostrar una falla controlada en Airflow: capturar retries, logs, auditoría y ejecución de la fuente independiente.
 
 **Criterio de término:** una falla controlada queda visible en Airflow/auditoría, la fuente independiente continúa y los KPI indican qué datos fueron procesados.

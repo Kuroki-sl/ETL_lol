@@ -2,7 +2,7 @@
 
 ## Regla acordada
 
-- La configuración actual de Match-V5 consulta hasta 100 partidas Solo/Duo por Riot ID, en páginas de 20. La evidencia histórica de esta sección se generó con el límite anterior de 50.
+- La configuración actual de Match-V5 consulta hasta 100 partidas Solo/Duo por Riot ID, en páginas de 20. Es un máximo: la cantidad disponible puede ser menor y los límites 429 de Riot pueden requerir reintentos.
 - Desde 3 partidas se calcula un puntaje exploratorio. Con 3–4 partidas, el estado es `MUESTRA CORTA` y `cumple_meta` queda sin evaluar.
 - Desde 5 partidas se evalúa `cumple_meta`: el winrate debe superar 55%. El umbral es una regla operativa del proyecto, no una garantía de significancia estadística.
 - El puntaje compuesto pondera winrate (60%), KDA normalizado (25%) y volumen hasta 50 partidas (15%), aunque la extracción ahora admite hasta 100.
@@ -26,19 +26,21 @@
 
 Janemba#0001 solo tenía dos partidas Solo/Duo disponibles en Match-V5, por lo que la configuración de 100 representa un máximo y no una cantidad garantizada. Riot aplicó límites `429` durante la extracción; el DAG respetó `Retry-After` y terminó sin fallas.
 
-## Evidencia de Frikz#xoro
+## Evidencia actual de Frikz#xoro
 
 | Campeón | Rol | Partidas | Victorias | Winrate | Puntaje | Estado | `cumple_meta` |
 |---|---|---:|---:|---:|---:|---|---|
-| Ekko | JUNGLE | 3 | 3 | 100,00% | 81,30 | `MUESTRA CORTA` | Sin evaluar |
-| Syndra | MIDDLE | 4 | 3 | 75,00% | 60,90 | `MUESTRA CORTA` | Sin evaluar |
-| Locke | MIDDLE | 5 | 3 | 60,00% | 50,35 | `MINIMO DE MUESTRA ALCANZADO` | Sí |
+| Ekko | MIDDLE | 8 | 7 | 87,50% | 74,20 | `MINIMO DE MUESTRA ALCANZADO` | Sí |
+| Locke | MIDDLE | 7 | 5 | 71,43% | 59,56 | `MINIMO DE MUESTRA ALCANZADO` | Sí |
+| Ashe | ADC | 3 | 2 | 66,67% | 53,15 | `MUESTRA CORTA` | Sin evaluar |
+| Ahri | MIDDLE | 3 | 2 | 66,67% | 53,00 | `MUESTRA CORTA` | Sin evaluar |
+| Ekko | JUNGLE | 8 | 5 | 62,50% | 50,45 | `MINIMO DE MUESTRA ALCANZADO` | Sí |
 
-Ekko ilustra por qué una tasa de 100% con tres partidas aparece como candidato, pero no se declara que cumple la meta. La consulta de trazabilidad listó 20 partidas y confirmó que el PUUID del jugador estaba presente en cada payload Match-V5.
+Ashe y Ahri aparecen como resultados exploratorios, pero con tres partidas aún no se evalúa `cumple_meta`. La base actual contiene 122 partidas Solo/Duo únicas en RAW donde aparece el PUUID de Frikz. El máximo de 100 se aplica a los IDs solicitados por cada Riot ID de la cohorte; las partidas pedidas para otros jugadores también aportan todas sus participaciones al DW y los KPI.
 
 ## Validación en Docker
 
-- `calcular_kpis_mart` recalculó 13.167 filas entre los cinco marts con los umbrales 3/5.
+- En la carga registrada, `raw.raw_partidas` quedó en 970 filas y `dw.fact_partidas` en 9.070. Los marts quedaron en: KPI 1 7.910; KPI 2 7.256; KPI 3 6.979; KPI 4 8.029; KPI 5 3.994 filas.
 - `airflow dags list-import-errors` devolvió `No data found`.
 - `docker compose ps` mostró los servicios saludables.
 - `python -m py_compile` para `etl_lol_utils.py` y `dag_03_calculo_kpis.py`, y `git diff --check`, terminaron sin errores.
