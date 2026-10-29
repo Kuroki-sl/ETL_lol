@@ -64,7 +64,7 @@ La consulta actual encuentra 122 partidas Solo/Duo únicas en RAW donde aparece 
 
 **Responsable vertical sugerido:** Sergio (integrante B). Joaquín y Juan revisan la integración completa.
 
-- [ ] **P0** Resolver la diferencia de definición del KPI 2: el código agrupa en bloques de cuatro horas y la propuesta conceptual habla de horas individuales. Alinear SQL, README e informe.
+- [x] **P0** Resolver la diferencia de definición del KPI 2: el código agrupa en bloques de cuatro horas y la propuesta conceptual habla de horas individuales. Alinear SQL, README e informe.
 - [ ] **P1** Seguir `gameCreation` desde Match-V5 a hora/fecha de Chile en `dw.dim_tiempo` y comprobar la agrupación seleccionada.
 - [ ] **P1** Verificar que el KPI 2 compare el winrate de la franja con el winrate global del mismo jugador y no recomiende muestras bajo el mínimo de 10 partidas.
 - [ ] **P1** Verificar el KPI 4 de punta a punta: actividad diaria, alerta desde 7 partidas y winrate diario solo desde 10.

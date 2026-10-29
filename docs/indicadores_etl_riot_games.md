@@ -60,38 +60,55 @@ El puntaje exploratorio se calcula desde 3 partidas. Entre 3 y 4 se marca **«Mu
 
 ---
 
-## KPI 2. Tasa de victorias del jugador por hora del día
+## KPI 2. Tasa de victorias del jugador por bloque horario
 
 **Ámbito:** Perfil específico.
 
-**Objetivo y decisión que apoya:** Identificar los horarios en los que el jugador presenta mejores o peores resultados históricos y utilizar esa información como apoyo para organizar sus sesiones de juego. El indicador describe una **asociación observada**; no pretende demostrar que el horario por sí solo causa un cambio de rendimiento.
+**Objetivo y decisión que apoya:** Identificar las franjas horarias en las que el jugador presenta mejores o peores resultados históricos y utilizar esa información como apoyo para organizar sus sesiones de juego. El indicador describe una **asociación observada**; no pretende demostrar que el horario por sí solo causa un cambio de rendimiento.
 
 **Fórmula:**
 
 \[
-\operatorname{Winrate}_{h}(\%)=\frac{\text{Victorias en partidas iniciadas a la hora }h}{\text{Partidas iniciadas a la hora }h}\times 100
+\operatorname{Winrate}_{b}(\%)=\frac{\text{Victorias en partidas iniciadas en el bloque }b}{\text{Partidas iniciadas en el bloque }b}\times 100
 \]
 
-Comparación sugerida:
+Comparación de referencia:
 
 \[
-\operatorname{Winrate\ general}(\%)=\frac{\text{Victorias del jugador en el período}}{\text{Partidas del jugador en el período}}\times100
+\operatorname{Winrate\ global}(\%)=\frac{\text{Victorias totales del jugador en el período}}{\text{Partidas totales del jugador en el período}}\times100
 \]
 
-**Fuentes:** Match-V5 (`gameCreation`, resultado y `puuid`), con transformación a la dimensión de tiempo. Account-V1 identifica al jugador.
+**Fuentes:** Match-V5 (`gameCreation`, resultado y `puuid`), con transformación a la dimensión de tiempo (`dw.dim_tiempo`). Account-V1 identifica al jugador.
 
-**Periodicidad propuesta:** Mensual, con desglose por hora de inicio de partida entre 00:00 y 23:00.
+**Periodicidad propuesta:** Mensual o acumulada, con desglose en **seis bloques de cuatro horas** según la hora de inicio de partida convertida a la hora local de Chile (`America/Santiago`):
+- `00-03`: Madrugada (00:00 a 03:59)
+- `04-07`: Temprano (04:00 a 07:59)
+- `08-11`: Mañana (08:00 a 11:59)
+- `12-15`: Mediodía / Tarde temprana (12:00 a 15:59)
+- `16-19`: Tarde / Noche temprana (16:00 a 19:59)
+- `20-23`: Noche (20:00 a 23:59)
 
-**Meta / umbral:** **Winrate por hora > 50%**, comparado además con el winrate general del jugador en el mismo período.
+**Meta / umbral:** **Mínimo de 10 partidas por bloque**. Si se alcanza el mínimo, se evalúa si el winrate del bloque supera el 50% y cómo se posiciona frente al winrate global del propio jugador.
+
+**Reglas de clasificación del bloque (`recomendacion_gestion`):**
+
+| Condición | Clasificación | Interpretación |
+|---|---|---|
+| Partidas en bloque < 10 | `MUESTRA INSUFICIENTE` | Muestra no representativa; no se recomienda ni califica la franja |
+| Partidas ≥ 10 y Winrate > 50% y Winrate > Winrate Global | `FRANJA FAVORABLE EN MUESTRA` | Horario destacado con desempeño superior al promedio personal y al 50% |
+| Partidas ≥ 10 y Winrate > Winrate Global (Winrate ≤ 50%) | `SOBRE PROMEDIO PERSONAL` | Rinde mejor que su media personal, aunque bajo el 50% global del juego |
+| Partidas ≥ 10 y Winrate < Winrate Global | `BAJO PROMEDIO PERSONAL` | Franja con rendimiento inferior al promedio habitual del jugador |
+| Partidas ≥ 10 y Winrate > 50% (Winrate ≤ Winrate Global) | `SOBRE 50%, SIMILAR AL GLOBAL` | Franja positiva, alineada con un winrate global alto del jugador |
+| Partidas ≥ 10 (otros casos) | `SIMILAR AL PROMEDIO GLOBAL` | Desempeño sin variaciones relevantes respecto al promedio general |
 
 **Reglas e interpretación:**
 
-- Transformar `gameCreation` a la zona horaria `America/Santiago` **antes** de extraer la hora y la fecha local.
-- Calcular el winrate general con el total de victorias dividido por el total de partidas. No promediar sin ponderación los 24 winrates horarios.
-- Mostrar cantidad de partidas por hora; una hora con muy pocos registros debe interpretarse con cautela. Puede usarse un mínimo exploratorio de 5 partidas por franja si la muestra lo permite.
+- Transformar `gameCreation` (timestamp en milisegundos UTC) a la zona horaria `America/Santiago` **antes** de extraer la hora y asignar el bloque correspondiente.
 - La hora se refiere al **inicio de la partida**, no a la hora de finalización.
+- La agrupación en bloques de 4 horas evita la dispersión excesiva que ocurriría al evaluar 24 horas individuales en muestras universitarias, concentrando las observaciones para alcanzar el umbral de significancia analítica de 10 partidas.
+- Calcular el winrate global con el total acumulado de victorias dividido por el total acumulado de partidas Solo/Duo. No promediar sin ponderación los winrates de los bloques.
 
-**Ejemplo:** Un jugador obtiene 62% entre las 20:00 y 20:59, frente a 53% global. Esto sugiere una franja históricamente favorable en la muestra, sin atribuirlo necesariamente a una mayor concentración.
+**Ejemplo:** Un jugador disputa 15 partidas en el bloque `20-23` y gana 10 (winrate 66,67%), mientras que su winrate global es 52,00%. El sistema clasifica el bloque como `FRANJA FAVORABLE EN MUESTRA`. En cambio, si en el bloque `04-07` registra 2 partidas con 2 victorias (100%), se clasifica como `MUESTRA INSUFICIENTE` y no se emite recomendación positiva.
 
 ---
 
@@ -257,7 +274,7 @@ Los cinco indicadores pueden construirse a partir de una tabla de hechos a nivel
 - Contexto competitivo: `queueId` y `gameVersion` de la partida.
 - Control de calidad: deduplicación por `(match_id, puuid)`, validación de roles y tratamiento explícito de remakes y datos incompletos.
 
-**Punto pendiente de diseño:** Para el KPI 3 hace falta cerrar los valores de referencia y la métrica individual exacta de objetivos de JG. En KPI 1 se muestran candidatos desde 3 partidas y se conserva el mínimo de 5 para evaluar la meta; para KPI 5, 10 participaciones es un umbral operativo ajustable al volumen recolectado.
+**Cierre de parámetros operativos:** Para el KPI 3 se ratificaron en la implementación SQL los dos factores por rol normalizados por minuto (TOP, MID, ADC, SUPP) y la aproximación de JG (`dragonKills + baronKills` asegurados individualmente por partida). En KPI 1 se muestran candidatos desde 3 partidas y se evalúa la meta desde 5; en KPI 2, 3 y 5 se mantiene el mínimo de 10 partidas/participaciones como umbral operativo del proyecto.
 
 ## 4. Conclusión
 
@@ -267,7 +284,7 @@ Se conservan los **cinco indicadores originales** y su propósito. Los cambios p
 
 ---
 
-## 5. Correcciones registradas en la implementación (2026-10-26)
+## 5. Correcciones registradas en la implementación (2026-10-26 a 2026-10-28)
 
 Esta sección registra cómo quedó implementado el proyecto después de las correcciones. Los mínimos y referencias numéricas son decisiones operativas de esta versión; no son reglas de Riot ni evidencia estadística concluyente.
 
@@ -279,4 +296,4 @@ Esta sección registra cómo quedó implementado el proyecto después de las cor
 6. **Calificación por rol de KPI 3:** se normalizan dos factores por rol entre 0 y 1 y se calcula `1 + 6 × promedio(factor1, factor2)`. Las referencias actuales están listadas en KPI 3 y son provisionales. JG usa `dragonKills + baronKills` del jugador como aproximación individual, no el total del equipo.
 7. **KPI 5 y parche:** se calcula sobre los participantes de las partidas recolectadas y se agrupa por campeón, rol y parche (`gameVersion`), con umbral >52% y mínimo 10 participaciones. Se clasifica como **«Destacado en la muestra»**; no se identifica OTP ni se afirma que la muestra represente todo LAS.
 
-**Límite de recolección vigente:** la extracción solicita 20 IDs por jugador por defecto. Estas correcciones evitan duplicar o perder participaciones de las partidas guardadas, pero no amplían todavía el historial descargado ni implementan paginación.
+**Estrategia y capacidad de recolección vigente (actualizado al 28-10-2026):** La extracción implementa paginación (`start` y `count`) consultando páginas de 20 partidas hasta un máximo de **100 partidas Solo/Duo por jugador** (`MAX_MATCHES_PER_PLAYER = 100`). La cohorte activa en Airflow (`riot_target_players`) monitorea 10 cuentas de nivel Diamante I/II de LAS, y el DAG de partidas delimita las peticiones a Riot únicamente para estos Riot IDs mediante consulta parametrizada en base de datos. La base conserva el historial acumulativo y registra todas las participaciones (`(match_id, puuid)`) deduplicadas, alcanzando más de 970 partidas en RAW y más de 9.000 participaciones en el Data Warehouse.
