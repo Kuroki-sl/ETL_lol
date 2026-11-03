@@ -22,7 +22,7 @@ default_args = {
 )
 def pipeline_completo_orquestador():
 
-    # 1. Ejecutar Perfil y Clasificación de Jugadores (Account-V1, Summoner-V4, League-V4)
+    #ejecutar Perfil y clasificacion de jugadores (Account-V1, Summoner-V4, League-V4)
     ejecutar_perfil = TriggerDagRunOperator(
         task_id="01_ejecutar_perfil_jugador",
         trigger_dag_id="dag_01_perfil_jugador",
@@ -31,11 +31,9 @@ def pipeline_completo_orquestador():
         reset_dag_run=True
     )
 
-    # 2. Ejecutar Historial y Telemetría de Partidas (Match-V5)
-    # Aislamiento de fuentes (Pauta / Rúbrica): trigger_rule=ALL_DONE permite que la extracción
-    # de partidas continúe incluso si la fuente de perfiles falló (ej. error 403 o rate limit en Account/League),
-    # garantizando el procesamiento de fuentes independientes sin detener el flujo global.
-    # conf={"skip_trigger_kpis": True} evita disparos duplicados hacia dag_03, ya que dag_00 gestiona la tarea 03.
+    #ejecutar historial y Telemetria de partidas (Match-V5)
+    #que continue incluso si la fuente de perfiles fallo,
+    #garantizando el procesamiento de fuentes independientes sin detener el flujo global.
     ejecutar_partidas = TriggerDagRunOperator(
         task_id="02_ejecutar_partidas_jugador",
         trigger_dag_id="dag_02_partidas_jugador",
@@ -46,8 +44,7 @@ def pipeline_completo_orquestador():
         trigger_rule=TriggerRule.ALL_DONE
     )
 
-    # 3. Ejecutar Cálculo Analítico de los 5 KPIs en Mart
-    # trigger_rule=ALL_DONE asegura que los indicadores se recalculen con los hechos consolidados en el Data Warehouse.
+    #ejecutar calculo analitico de los 5 KPIs en Mart
     ejecutar_kpis = TriggerDagRunOperator(
         task_id="03_ejecutar_calculo_kpis",
         trigger_dag_id="dag_03_calculo_kpis",
@@ -57,7 +54,7 @@ def pipeline_completo_orquestador():
         trigger_rule=TriggerRule.ALL_DONE
     )
 
-    # Flujo de ejecución tolerante a fallas entre fuentes independientes
+    #flujo de ejecucion tolerante a fallas entre fuentes independientes
     ejecutar_perfil >> ejecutar_partidas >> ejecutar_kpis
 
 

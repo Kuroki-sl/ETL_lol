@@ -62,9 +62,8 @@ def partidas_jugador_etl():
             for player in target_players
         ]
 
-        # Parámetros pasados en DAG Run (ej. backfill)
         dag_run_conf = context.get("dag_run").conf or {} if context.get("dag_run") else {}
-        # count se conserva como alias para DAG Runs creados con la configuración anterior.
+        #count se conserva como alias para DAG Runs creados con la configuración anterior.
         max_partidas_por_jugador = dag_run_conf.get(
             "max_partidas_por_jugador",
             dag_run_conf.get("count", 100)
@@ -152,7 +151,7 @@ def partidas_jugador_etl():
         reset_dag_run=True,
     )
 
-    # Grafo
+    #grafo
     val = validar_api_match()
     ext = extraer_partidas_raw(val)
     stg = transformar_staging_partidas(ext)
@@ -160,7 +159,7 @@ def partidas_jugador_etl():
     dw_load = cargar_dw_hechos_y_tiempo_task(cal)
     audit = registrar_auditoria_task(dw_load)
 
-    # Disparo automático de indicadores tras carga exitosa al DW
+    #disparo automatico de indicadores tras carga exitosa al DW
     branch_kpis = evaluar_disparo_kpis()
     audit >> branch_kpis >> [disparar_kpis, omitir_kpis]
 

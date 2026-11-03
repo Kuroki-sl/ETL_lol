@@ -82,7 +82,7 @@ def calculo_kpis_etl():
         )
         return True
 
-    # Grafo
+    #grafo
     verif = verificar_datos_dw()
     calc = calcular_kpis_mart_task(verif)
     registrar_auditoria_task(calc)
