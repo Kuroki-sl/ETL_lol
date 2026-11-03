@@ -3,6 +3,8 @@ import json
 from datetime import datetime, timedelta
 from airflow.decorators import dag, task
 from airflow.models import Variable
+from airflow.operators.trigger_dagrun import TriggerDagRunOperator
+from airflow.operators.empty import EmptyOperator
 
 from etl_lol_utils import (
     DEFAULT_AMERICAS_URL,
@@ -125,13 +127,42 @@ def partidas_jugador_etl():
         )
         return True
 
+    @task.branch
+    def evaluar_disparo_kpis(**context):
+        """
+        Evalúa si debe disparar automáticamente dag_03_calculo_kpis.
+        En ejecuciones programadas (schedule 0 */6 * * *) o manuales directas,
+        dispara dag_03 tras la carga exitosa al DW (criterio de rúbrica).
+        Si fue invocado desde dag_00 con skip_trigger_kpis=True, omite el disparo redundante.
+        """
+        dag_run = context.get("dag_run")
+        conf = dag_run.conf or {} if dag_run else {}
+        if conf.get("skip_trigger_kpis", False):
+            return "omitir_disparo_kpis"
+        return "disparar_calculo_kpis_automatico"
+
+    omitir_kpis = EmptyOperator(
+        task_id="omitir_disparo_kpis"
+    )
+
+    disparar_kpis = TriggerDagRunOperator(
+        task_id="disparar_calculo_kpis_automatico",
+        trigger_dag_id="dag_03_calculo_kpis",
+        wait_for_completion=False,
+        reset_dag_run=True,
+    )
+
     # Grafo
     val = validar_api_match()
     ext = extraer_partidas_raw(val)
     stg = transformar_staging_partidas(ext)
     cal = validar_calidad_partidas(stg)
     dw_load = cargar_dw_hechos_y_tiempo_task(cal)
-    registrar_auditoria_task(dw_load)
+    audit = registrar_auditoria_task(dw_load)
+
+    # Disparo automático de indicadores tras carga exitosa al DW
+    branch_kpis = evaluar_disparo_kpis()
+    audit >> branch_kpis >> [disparar_kpis, omitir_kpis]
 
 
 dag_instancia = partidas_jugador_etl()
