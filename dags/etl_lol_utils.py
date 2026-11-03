@@ -133,6 +133,13 @@ def ensure_analytics_schema(engine=None):
         conn.execute(text("ALTER TABLE mart.kpi_01_mejores_campeones ALTER COLUMN kda_promedio DROP NOT NULL;"))
         conn.execute(text("ALTER TABLE mart.kpi_01_mejores_campeones ALTER COLUMN cumple_meta DROP NOT NULL;"))
         conn.execute(text("ALTER TABLE mart.kpi_03_calificacion_rol ALTER COLUMN nota_escala_1_a_7 DROP NOT NULL;"))
+        conn.execute(text("ALTER TABLE mart.kpi_03_calificacion_rol ADD COLUMN IF NOT EXISTS kda_promedio NUMERIC(6,2);"))
+        conn.execute(text("ALTER TABLE mart.kpi_03_calificacion_rol ADD COLUMN IF NOT EXISTS torres_min_promedio NUMERIC(6,2);"))
+        conn.execute(text("ALTER TABLE mart.kpi_03_calificacion_rol ADD COLUMN IF NOT EXISTS objetivos_jg_promedio NUMERIC(6,2);"))
+        conn.execute(text("ALTER TABLE mart.kpi_03_calificacion_rol ALTER COLUMN nombre_jugador TYPE VARCHAR(100);"))
+        conn.execute(text("ALTER TABLE mart.kpi_03_calificacion_rol ALTER COLUMN dpm_promedio DROP NOT NULL;"))
+        conn.execute(text("ALTER TABLE mart.kpi_03_calificacion_rol ALTER COLUMN gpm_promedio DROP NOT NULL;"))
+        conn.execute(text("ALTER TABLE mart.kpi_03_calificacion_rol ALTER COLUMN vision_min_promedio DROP NOT NULL;"))
         conn.execute(text("ALTER TABLE mart.kpi_04_control_actividad_diaria ALTER COLUMN winrate_del_dia DROP NOT NULL;"))
         conn.execute(text("ALTER TABLE mart.kpi_05_tierlist_meta_vs_otp ALTER COLUMN kda_global DROP NOT NULL;"))
         conn.execute(text("""
@@ -1211,20 +1218,20 @@ def calcular_kpis_mart(min_partidas_kpi1=3, min_partidas_kpi1_adecuada=5,
             SELECT
                 *,
                 CASE
-                    WHEN rol = 'TOP' THEN LEAST(1.0, GREATEST(0.0, dpm / 600.0))
-                    WHEN rol = 'JUNGLE' THEN CASE WHEN kda_periodo IS NULL THEN NULL ELSE LEAST(1.0, GREATEST(0.0, kda_periodo / 4.0)) END
-                    WHEN rol = 'MIDDLE' THEN CASE WHEN kda_periodo IS NULL THEN NULL ELSE LEAST(1.0, GREATEST(0.0, kda_periodo / 4.0)) END
-                    WHEN rol IN ('BOTTOM', 'ADC') THEN LEAST(1.0, GREATEST(0.0, dpm / 750.0))
-                    WHEN rol IN ('UTILITY', 'SUPPORT') THEN CASE WHEN kda_periodo IS NULL THEN NULL ELSE LEAST(1.0, GREATEST(0.0, kda_periodo / 4.0)) END
-                    ELSE CASE WHEN kda_periodo IS NULL THEN NULL ELSE LEAST(1.0, GREATEST(0.0, kda_periodo / 3.5)) END
+                    WHEN rol = 'TOP' THEN LEAST(1.0, GREATEST(0.0, dpm / 500.0))
+                    WHEN rol = 'JUNGLE' THEN CASE WHEN kda_periodo IS NULL THEN NULL ELSE LEAST(1.0, GREATEST(0.0, kda_periodo / 3.0)) END
+                    WHEN rol = 'MIDDLE' THEN CASE WHEN kda_periodo IS NULL THEN NULL ELSE LEAST(1.0, GREATEST(0.0, kda_periodo / 3.0)) END
+                    WHEN rol IN ('BOTTOM', 'ADC') THEN LEAST(1.0, GREATEST(0.0, dpm / 650.0))
+                    WHEN rol IN ('UTILITY', 'SUPPORT') THEN CASE WHEN kda_periodo IS NULL THEN NULL ELSE LEAST(1.0, GREATEST(0.0, kda_periodo / 3.0)) END
+                    ELSE CASE WHEN kda_periodo IS NULL THEN NULL ELSE LEAST(1.0, GREATEST(0.0, kda_periodo / 3.0)) END
                 END AS factor_1,
                 CASE
                     WHEN rol = 'TOP' THEN LEAST(1.0, GREATEST(0.0, torres_min / 150.0))
-                    WHEN rol = 'JUNGLE' THEN LEAST(1.0, GREATEST(0.0, objetivos_epicos_por_partida / 1.0))
-                    WHEN rol = 'MIDDLE' THEN LEAST(1.0, GREATEST(0.0, dpm / 700.0))
+                    WHEN rol = 'JUNGLE' THEN LEAST(1.0, GREATEST(0.0, objetivos_epicos_por_partida / 2.0))
+                    WHEN rol = 'MIDDLE' THEN LEAST(1.0, GREATEST(0.0, dpm / 600.0))
                     WHEN rol IN ('BOTTOM', 'ADC') THEN LEAST(1.0, GREATEST(0.0, gpm / 450.0))
-                    WHEN rol IN ('UTILITY', 'SUPPORT') THEN LEAST(1.0, GREATEST(0.0, vision_min / 2.0))
-                    ELSE LEAST(1.0, GREATEST(0.0, dpm / 650.0))
+                    WHEN rol IN ('UTILITY', 'SUPPORT') THEN LEAST(1.0, GREATEST(0.0, vision_min / 1.5))
+                    ELSE LEAST(1.0, GREATEST(0.0, dpm / 600.0))
                 END AS factor_2
             FROM metricas_rol
         ),
@@ -1238,23 +1245,28 @@ def calcular_kpis_mart(min_partidas_kpi1=3, min_partidas_kpi1_adecuada=5,
             FROM factores
         )
         INSERT INTO mart.kpi_03_calificacion_rol (
-            puuid, nombre_jugador, rol, partidas_jugadas, dpm_promedio, gpm_promedio,
-            vision_min_promedio, nota_escala_1_a_7, estado_rendimiento, fecha_calculo
+            puuid, nombre_jugador, rol, partidas_jugadas,
+            kda_promedio, dpm_promedio, gpm_promedio, vision_min_promedio,
+            torres_min_promedio, objetivos_jg_promedio,
+            nota_escala_1_a_7, estado_rendimiento, fecha_calculo
         )
         SELECT
             puuid,
             nombre_jugador,
             rol,
             partidas_jugadas,
+            ROUND(kda_periodo::NUMERIC, 2),
             ROUND(dpm::NUMERIC, 2),
             ROUND(gpm::NUMERIC, 2),
             ROUND(vision_min::NUMERIC, 2),
+            ROUND(torres_min::NUMERIC, 2),
+            ROUND(objetivos_epicos_por_partida::NUMERIC, 2),
             nota_final,
             CASE
-                WHEN partidas_jugadas < :min_partidas_kpi3 THEN 'MUESTRA INSUFICIENTE'
-                WHEN nota_final IS NULL THEN 'METRICAS INSUFICIENTES'
-                WHEN nota_final > 5.0 THEN 'SUPERA META'
-                ELSE 'NO SUPERA META'
+                WHEN partidas_jugadas < :min_partidas_kpi3 THEN 'Muestra insuficiente'
+                WHEN nota_final IS NULL THEN 'Métricas insuficientes'
+                WHEN nota_final > 5.0 THEN 'Logra la meta'
+                ELSE 'No logró la meta'
             END,
             CURRENT_TIMESTAMP
         FROM puntaje_calculado;
@@ -1311,22 +1323,22 @@ def calcular_kpis_mart(min_partidas_kpi1=3, min_partidas_kpi1_adecuada=5,
             FROM agregados
         )
         INSERT INTO mart.kpi_05_tierlist_meta_vs_otp (
-            campeon, rol, parche, partidas_totales, winrate_global_pct, kda_global,
-            clasificacion_tier, fecha_calculo
+            campeon, rol, partidas_totales, winrate_global_pct, kda_global,
+            clasificacion_tier, fecha_calculo, parche
         )
         SELECT
             campeon,
             rol,
-            parche,
             partidas_totales,
             winrate_global_pct,
             kda_global,
             CASE
-                WHEN partidas_totales < :min_partidas_kpi5 THEN 'MUESTRA INSUFICIENTE'
-                WHEN winrate_global_pct > 52.0 THEN 'DESTACADO EN LA MUESTRA'
-                ELSE 'NO SUPERA UMBRAL'
+                WHEN partidas_totales < :min_partidas_kpi5 THEN 'Muestra insuficiente'
+                WHEN winrate_global_pct > 52.0 THEN 'Destacado en la muestra'
+                ELSE 'No supera el umbral'
             END,
-            CURRENT_TIMESTAMP
+            CURRENT_TIMESTAMP,
+            parche
         FROM indicadores;
     """)
 

@@ -84,6 +84,22 @@ CREATE TABLE IF NOT EXISTS staging.stg_partidas (
     PRIMARY KEY (match_id, puuid)
 );
 
+CREATE TABLE IF NOT EXISTS staging.estadisticas_jugador (
+    match_id VARCHAR(50),
+    puuid TEXT,
+    rol TEXT,
+    dpm NUMERIC,
+    gpm NUMERIC,
+    vspm NUMERIC,
+    dragon_kills INT,
+    baron_kills INT,
+    kills INT,
+    deaths INT,
+    assists INT,
+    danio_torres NUMERIC,
+    duracion_minutos NUMERIC
+);
+
 --capa DW
 CREATE TABLE IF NOT EXISTS dw.dim_tiempo (
     id_tiempo INT PRIMARY KEY,            -- Formato YYYYMMDDHH
@@ -158,12 +174,15 @@ CREATE TABLE IF NOT EXISTS mart.kpi_02_winrate_horario (
 
 CREATE TABLE IF NOT EXISTS mart.kpi_03_calificacion_rol (
     puuid VARCHAR(100) NOT NULL,
-    nombre_jugador VARCHAR(85) NOT NULL,
+    nombre_jugador VARCHAR(100) NOT NULL,
     rol VARCHAR(20) NOT NULL,
     partidas_jugadas INT NOT NULL,
-    dpm_promedio NUMERIC(8,2) NOT NULL,
-    gpm_promedio NUMERIC(8,2) NOT NULL,
-    vision_min_promedio NUMERIC(6,2) NOT NULL,
+    kda_promedio NUMERIC(6,2),
+    dpm_promedio NUMERIC(8,2),
+    gpm_promedio NUMERIC(8,2),
+    vision_min_promedio NUMERIC(6,2),
+    torres_min_promedio NUMERIC(6,2),
+    objetivos_jg_promedio NUMERIC(6,2),
     nota_escala_1_a_7 NUMERIC(3,1),
     estado_rendimiento VARCHAR(30) NOT NULL,
     fecha_calculo TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -185,11 +204,11 @@ CREATE TABLE IF NOT EXISTS mart.kpi_04_control_actividad_diaria (
 CREATE TABLE IF NOT EXISTS mart.kpi_05_tierlist_meta_vs_otp (
     campeon VARCHAR(50) NOT NULL,
     rol VARCHAR(20) NOT NULL,
-    parche VARCHAR(20) NOT NULL,
     partidas_totales INT NOT NULL,
     winrate_global_pct NUMERIC(5,2) NOT NULL,
     kda_global NUMERIC(6,2),
     clasificacion_tier VARCHAR(40) NOT NULL,
     fecha_calculo TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    parche VARCHAR(20) NOT NULL DEFAULT 'UNKNOWN',
     PRIMARY KEY (campeon, rol, parche)
 );

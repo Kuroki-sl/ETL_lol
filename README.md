@@ -179,6 +179,17 @@ Get-Content .\sql\03_consulta_kpi_02_04_horario_actividad.sql -Raw |
 
 El script incluye una consulta de trazabilidad que verifica la conversión de timestamps UTC desde `raw.raw_partidas` hacia la hora y fecha local de Chile en `dw.dim_tiempo`. El detalle de diseño está resumido en [`docs/avance_hu02.md`](docs/avance_hu02.md).
 
+### Desempeño por rol y análisis de meta observado (HU-03)
+
+Para consultar la calificación de desempeño por rol (KPI 3) y el análisis del metajuego observado por parche (KPI 5), el archivo `sql/04_consulta_kpi_03_05_rol_meta.sql` viene configurado para `Frikz#xoro` (ajustable a cualquier Riot ID de la cohorte o filtrable por rol y parche). Evalúa las métricas clave normalizadas por minuto en escala 1,0 a 7,0 (`kda_promedio`, `dpm_promedio`, `gpm_promedio`, `vision_min_promedio`, `torres_min_promedio`, `objetivos_jg_promedio`) con nota > 5,0 para `Logra la meta`. Además, clasifica a los campeones en la muestra en `Destacado en la muestra` (> 52% winrate) y `No supera el umbral` para parches con al menos 10 participaciones. Ejecutar con:
+
+```powershell
+Get-Content .\sql\04_consulta_kpi_03_05_rol_meta.sql -Raw |
+  docker exec -i db_lol psql -U postgres -d gestion_lol
+```
+
+El script incluye consultas de trazabilidad que siguen el cálculo de factores desde `dw.fact_partidas` y validan el conteo único de participaciones por parche. El avance y la evidencia detallada de Juan están en [`docs/avance_hu03.md`](docs/avance_hu03.md).
+
 ---
 
 ## Arquitectura del Pipeline y Capas de Datos
@@ -191,7 +202,7 @@ El script incluye una consulta de trazabilidad que verifica la conversión de ti
 * **Capa `mart` (Indicadores de Gestión / KPIs):**
   1. `mart.kpi_01_mejores_campeones`: winrate, KDA agregado y puntaje compuesto por jugador/campeón/rol. Desde 3 partidas puntúa de forma exploratoria; de 3 a 4 se marca `MUESTRA CORTA`, y `cumple_meta` solo se evalúa desde 5. El puntaje pondera winrate (60%), KDA normalizado (25%) y volumen hasta 50 partidas (15%).
   2. `mart.kpi_02_winrate_horario`: winrate por bloque local de 4 horas, comparado con el winrate global del jugador. Con menos de 10 partidas por bloque se muestra como muestra insuficiente y no se recomienda esa franja.
-  3. `mart.kpi_03_calificacion_rol`: desde 10 partidas, calcula dos factores según el rol, limita cada factor al rango 0–1 y promedia ambos para obtener `1 + 6 × promedio` (escala 1,0–7,0). TOP usa daño/minuto (600) y daño a torres/minuto (150); JUNGLE usa KDA agregado (4) y dragones/barones del jugador por partida (1); MIDDLE usa KDA (4) y daño/minuto (700); ADC usa daño/minuto (750) y oro/minuto (450); SUPPORT usa KDA (4) y visión/minuto (2). `SUPERA META` significa nota mayor que 5,0. Son referencias definidas para este proyecto, no benchmarks oficiales de Riot.
+  3. `mart.kpi_03_calificacion_rol`: calcula dos factores según el rol, limita cada factor al rango 0–1 y promedia ambos para obtener `1 + 6 × promedio` (escala 1,0–7,0), guardando promedios de KDA, daño, oro, visión, daño a torres y objetivos neutrales asegurados. TOP usa daño/minuto (500) y daño a torres/minuto (150); JUNGLE usa KDA agregado (3,0) y dragones/barones del jugador por partida (2,0); MIDDLE usa KDA (3,0) y daño/minuto (600); ADC usa daño/minuto (650) y oro/minuto (450); SUPPORT usa KDA (3,0) y visión/minuto (1,5). `Logra la meta` significa nota mayor que 5,0. Son referencias acordadas para este proyecto, no benchmarks oficiales de Riot.
   4. `mart.kpi_04_control_actividad_diaria`: partidas y horas jugadas por fecha local; alerta desde 7 partidas. El winrate diario solo se muestra desde 5 partidas y la alerta no diagnostica fatiga.
   5. `mart.kpi_05_tierlist_meta_vs_otp`: meta observado por campeón/rol/parche en las partidas recolectadas, considerando a todos sus participantes. Requiere 10 participaciones para clasificar; no identifica OTP ni representa automáticamente todo LAS.
 
