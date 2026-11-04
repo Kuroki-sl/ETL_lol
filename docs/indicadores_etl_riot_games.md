@@ -156,13 +156,13 @@ Se propone calcular cada factor como **promedio de la métrica de las partidas d
 
 **Referencias:** Los valores originales del borrador (por ejemplo, KDA 4,0 o cantidades totales de daño y visión) eran ilustrativos. **No deben reutilizarse sin adaptación** cuando la métrica pase a expresarse por minuto. El equipo definirá una tabla de referencias por rol antes de implementar, indicando unidad, criterio y valor. No se presentan como benchmarks oficiales.
 
-**Referencias usadas provisionalmente por la implementación actual:** TOP: daño/minuto 600 y daño a torres/minuto 150; JG: KDA 4 y dragones/barones individuales por partida 1; MID: KDA 4 y daño/minuto 700; ADC: daño/minuto 750 y oro/minuto 450; SUPP: KDA 4 y visión/minuto 2. Son parámetros definidos para este proyecto, no benchmarks oficiales de Riot, y deben revisarse con el equipo/profesora.
+**Referencias usadas en la implementación actual:** TOP: daño/minuto 650 y daño a torres/minuto 200; JG: KDA 4,5 y dragones/barones individuales por partida 3,0; MID: KDA 4,5 y daño/minuto 700; ADC: daño/minuto 750 y oro/minuto 500; SUPP: KDA 4,0 y visión/minuto 2,0. Son parámetros definidos para este proyecto, no benchmarks oficiales de Riot.
 
 **Fuentes:** Match-V5, campos de participaciones y estadísticas por partida. Account-V1 para identificar el perfil.
 
 **Periodicidad propuesta:** Semanal.
 
-**Meta / umbral:** **Nota > 5,0** para considerar que el rol supera la meta definida.
+**Meta / umbral:** **Nota > 5,5** para considerar que el rol supera la meta definida.
 
 **Reglas e interpretación:**
 
@@ -260,7 +260,7 @@ El mínimo de partidas **reduce la sensibilidad a muestras pequeñas**, pero **n
 |---|---|---|---|---|
 | 1. Winrate por campeón | Jugador, campeón y rol | Victorias / partidas | Mostrar desde 3; evaluar > 55% desde 5 partidas | Marcar 3–4 como muestra corta y evitar rankings de muestras mínimas |
 | 2. Winrate horario | Jugador y bloque local de 4 horas | Victorias / partidas por bloque | > 50%, mínimo 10 partidas por bloque | Comparar con el winrate global ponderado por partidas |
-| 3. Calificación por rol | Jugador y rol | Dos factores normalizados y nota 1–7 | Nota > 5,0, mínimo 10 partidas | Pasar acumulados a tasas por minuto y usar referencias operativas documentadas |
+| 3. Calificación por rol | Jugador y rol | Dos factores normalizados y nota 1–7 | Nota > 5,5, mínimo 10 partidas | Pasar acumulados a tasas por minuto y usar referencias operativas documentadas |
 | 4. Partidas por día | Jugador y fecha local | Recuento de partidas | Alerta desde 7 partidas | Mostrar winrate diario solo desde 5 partidas; medir actividad, no diagnosticar fatiga |
 | 5. Meta observado | Campeón, rol, parche y muestra | Victorias / participaciones | > 52%, mínimo 10 participaciones | Excluir muestras pequeñas de la clasificación de dominancia; no etiquetar OTP |
 

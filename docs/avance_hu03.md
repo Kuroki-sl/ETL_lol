@@ -10,9 +10,9 @@
 
 | Rol | Factor 1 (Criterio y Referencia) | Factor 2 (Criterio y Referencia) |
 | :--- | :--- | :--- |
-| **TOP** | Daño a campeones / min (`600.0` DPM) | Daño a torres / min (`200.0` Torres/min) |
+| **TOP** | Daño a campeones / min (`650.0` DPM) | Daño a torres / min (`200.0` Torres/min) |
 | **JUNGLE** | KDA agregado (`4.5`) | Dragones y Barones individuales por partida (`3.0` Obj/partida) |
-| **MIDDLE** | KDA agregado (`3.0`) | Daño a campeones / min (`600.0` DPM) |
+| **MIDDLE** | KDA agregado (`4.5`) | Daño a campeones / min (`700.0` DPM) |
 | **BOTTOM / ADC** | Daño a campeones / min (`750.0` DPM) | Oro por minuto (`500.0` GPM) |
 | **UTILITY / SUPPORT** | KDA agregado (`4.0`) | Puntuación de visión / min (`2.0` VSPM) |
 
@@ -55,7 +55,7 @@ Al ejecutar la consulta sobre la base de datos PostgreSQL real, se obtienen las 
 | **TOP** | 2 | 0,00 | 588,67 | 324,36 | 0,74 | 81,61 | 0,00 | **4,9** | `No logró la meta` |
 
 **Hallazgos de gestión:**
-* `Frikz#xoro` es predominantemente jugador de carril central (`MIDDLE` con 78 partidas). Su daño promedio es altísimo (935,98 DPM vs referencia 600), lo que satura su factor ofensivo al máximo (1,0) y compensa su KDA de 2,42, alcanzando una nota de 5,6.
+* `Frikz#xoro` es predominantemente jugador de carril central (`MIDDLE` con 78 partidas). Su daño promedio es altísimo (935,98 DPM vs referencia 700), lo que satura su factor ofensivo al máximo (1,0) y compensa su KDA de 2,42 (vs referencia 4,5), alcanzando una nota de 5,6.
 * En `JUNGLE` (16 partidas), no supera la referencia de objetivos neutrales individuales con 2,88 dragones/barones por partida frente a la referencia de 3,0.
 * Las participaciones en `UTILITY` (6) y `TOP` (2) presentan notas elevadas, pero al contar con menos de 10 partidas se interpretan con cautela.
 

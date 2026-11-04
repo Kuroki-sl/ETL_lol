@@ -1,4 +1,4 @@
--- HU-02 / Sergio: Analizar horarios y actividad diaria
+-- HU-02: Analizar horarios y actividad diaria
 -- Indicadores: KPI 2 (Winrate por Bloque Horario) y KPI 4 (Control de Actividad)
 
 -- Cambia 'Frikz#xoro' por el Riot ID del jugador que deseas consultar.

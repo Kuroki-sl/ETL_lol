@@ -1265,7 +1265,7 @@ def calcular_kpis_mart(min_partidas_kpi1=3, min_partidas_kpi1_adecuada=5,
             CASE
                 WHEN partidas_jugadas < :min_partidas_kpi3 THEN 'Muestra insuficiente'
                 WHEN nota_final IS NULL THEN 'Métricas insuficientes'
-                WHEN nota_final > 5.0 THEN 'Logra la meta'
+                WHEN nota_final > 5.5 THEN 'Logra la meta'
                 ELSE 'No logró la meta'
             END,
             CURRENT_TIMESTAMP
