@@ -104,11 +104,11 @@ La consulta de HU-03 para `Frikz#xoro` arroja las siguientes calificaciones por 
 
 | Rol | Partidas | KDA | DPM | GPM | Visión/min | Torres/min | Obj JG/partida | Nota (1–7) | Estado de Rendimiento |
 | :--- | :---:| :---:| :---:| :---:| :---:| :---:| :---:| :---:| :--- |
-| MIDDLE | 78 | 2,42 | 935,98 | 415,87 | 0,83 | 214,82 | 0,04 | **6,4** | `Logra la meta` |
-| JUNGLE | 16 | 2,19 | 833,34 | 450,76 | 0,92 | 115,91 | 2,88 | **6,2** | `Logra la meta` |
-| BOTTOM | 14 | 2,36 | 972,49 | 467,38 | 0,90 | 198,49 | 0,36 | **7,0** | `Logra la meta` |
-| UTILITY | 6 | 5,83 | 439,52 | 328,26 | 2,70 | 66,63 | 0,17 | **7,0** | `Logra la meta` |
-| TOP | 2 | 0,00 | 588,67 | 324,36 | 0,74 | 81,61 | 0,00 | **5,6** | `Logra la meta` |
+| **MIDDLE** | 78 | 2,42 | 935,98 | 415,87 | 0,83 | 214,82 | 0,04 | **5,6** | `Logra la meta` |
+| **JUNGLE** | 16 | 2,19 | 833,34 | 450,76 | 0,92 | 115,91 | 2,88 | **5,3** | `No logró la meta` |
+| **BOTTOM** | 14 | 2,36 | 972,49 | 467,38 | 0,90 | 198,49 | 0,36 | **6,8** | `Logra la meta` |
+| **UTILITY** | 6 | 5,83 | 439,52 | 328,26 | 2,70 | 66,63 | 0,17 | **7,0** | `Logra la meta` |
+| **TOP** | 2 | 0,00 | 588,67 | 324,36 | 0,74 | 81,61 | 0,00 | **4,9** | `No logró la meta` |
 
 En el análisis del meta observado (KPI 5), se identificaron 29 campeones destacados (winrate > 52% con ≥ 10 partidas), encabezados por Soraka UTILITY en parches 15.15 y 15.14 (90,0% y 88,2%), Caitlyn BOTTOM en parche 16.18 (75,0%) y Lulu UTILITY (71,4% a 72,7%). Casos como Lulu en 16.18 (26 partidas, 38,46%) se etiquetaron como `No supera el umbral`, y 4.763 combinaciones con menos de 10 partidas quedaron protegidas como `Muestra insuficiente`. Más detalles en [`docs/avance_hu03.md`](avance_hu03.md) y [`sql/04_consulta_kpi_03_05_rol_meta.sql`](../sql/04_consulta_kpi_03_05_rol_meta.sql).
 

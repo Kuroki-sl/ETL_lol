@@ -1218,20 +1218,20 @@ def calcular_kpis_mart(min_partidas_kpi1=3, min_partidas_kpi1_adecuada=5,
             SELECT
                 *,
                 CASE
-                    WHEN rol = 'TOP' THEN LEAST(1.0, GREATEST(0.0, dpm / 500.0))
-                    WHEN rol = 'JUNGLE' THEN CASE WHEN kda_periodo IS NULL THEN NULL ELSE LEAST(1.0, GREATEST(0.0, kda_periodo / 3.0)) END
-                    WHEN rol = 'MIDDLE' THEN CASE WHEN kda_periodo IS NULL THEN NULL ELSE LEAST(1.0, GREATEST(0.0, kda_periodo / 3.0)) END
-                    WHEN rol IN ('BOTTOM', 'ADC') THEN LEAST(1.0, GREATEST(0.0, dpm / 650.0))
-                    WHEN rol IN ('UTILITY', 'SUPPORT') THEN CASE WHEN kda_periodo IS NULL THEN NULL ELSE LEAST(1.0, GREATEST(0.0, kda_periodo / 3.0)) END
-                    ELSE CASE WHEN kda_periodo IS NULL THEN NULL ELSE LEAST(1.0, GREATEST(0.0, kda_periodo / 3.0)) END
+                    WHEN rol = 'TOP' THEN LEAST(1.0, GREATEST(0.0, dpm / 650.0))
+                    WHEN rol = 'JUNGLE' THEN CASE WHEN kda_periodo IS NULL THEN NULL ELSE LEAST(1.0, GREATEST(0.0, kda_periodo / 4.5)) END
+                    WHEN rol = 'MIDDLE' THEN CASE WHEN kda_periodo IS NULL THEN NULL ELSE LEAST(1.0, GREATEST(0.0, kda_periodo / 4.5)) END
+                    WHEN rol IN ('BOTTOM', 'ADC') THEN LEAST(1.0, GREATEST(0.0, dpm / 750.0))
+                    WHEN rol IN ('UTILITY', 'SUPPORT') THEN CASE WHEN kda_periodo IS NULL THEN NULL ELSE LEAST(1.0, GREATEST(0.0, kda_periodo / 4.0)) END
+                    ELSE CASE WHEN kda_periodo IS NULL THEN NULL ELSE LEAST(1.0, GREATEST(0.0, kda_periodo / 3.5)) END
                 END AS factor_1,
                 CASE
-                    WHEN rol = 'TOP' THEN LEAST(1.0, GREATEST(0.0, torres_min / 150.0))
-                    WHEN rol = 'JUNGLE' THEN LEAST(1.0, GREATEST(0.0, objetivos_epicos_por_partida / 2.0))
-                    WHEN rol = 'MIDDLE' THEN LEAST(1.0, GREATEST(0.0, dpm / 600.0))
-                    WHEN rol IN ('BOTTOM', 'ADC') THEN LEAST(1.0, GREATEST(0.0, gpm / 450.0))
-                    WHEN rol IN ('UTILITY', 'SUPPORT') THEN LEAST(1.0, GREATEST(0.0, vision_min / 1.5))
-                    ELSE LEAST(1.0, GREATEST(0.0, dpm / 600.0))
+                    WHEN rol = 'TOP' THEN LEAST(1.0, GREATEST(0.0, torres_min / 200.0))
+                    WHEN rol = 'JUNGLE' THEN LEAST(1.0, GREATEST(0.0, objetivos_epicos_por_partida / 3.0))
+                    WHEN rol = 'MIDDLE' THEN LEAST(1.0, GREATEST(0.0, dpm / 700.0))
+                    WHEN rol IN ('BOTTOM', 'ADC') THEN LEAST(1.0, GREATEST(0.0, gpm / 500.0))
+                    WHEN rol IN ('UTILITY', 'SUPPORT') THEN LEAST(1.0, GREATEST(0.0, vision_min / 2.0))
+                    ELSE LEAST(1.0, GREATEST(0.0, dpm / 650.0))
                 END AS factor_2
             FROM metricas_rol
         ),

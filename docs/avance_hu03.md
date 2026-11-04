@@ -10,11 +10,11 @@
 
 | Rol | Factor 1 (Criterio y Referencia) | Factor 2 (Criterio y Referencia) |
 | :--- | :--- | :--- |
-| **TOP** | Daño a campeones / min (Ref: `500.0` DPM) | Daño a torres / min (Ref: `150.0` Torres/min) |
-| **JUNGLE** | KDA agregado (Ref: `3.0`) | Dragones y Barones individuales por partida (Ref: `2.0` Obj/partida) |
-| **MIDDLE** | KDA agregado (Ref: `3.0`) | Daño a campeones / min (Ref: `600.0` DPM) |
-| **BOTTOM / ADC** | Daño a campeones / min (Ref: `650.0` DPM) | Oro por minuto (Ref: `450.0` GPM) |
-| **UTILITY / SUPPORT** | KDA agregado (Ref: `3.0`) | Puntuación de visión / min (Ref: `1.5` VSPM) |
+| **TOP** | Daño a campeones / min (`600.0` DPM) | Daño a torres / min (`200.0` Torres/min) |
+| **JUNGLE** | KDA agregado (`4.5`) | Dragones y Barones individuales por partida (`3.0` Obj/partida) |
+| **MIDDLE** | KDA agregado (`3.0`) | Daño a campeones / min (`600.0` DPM) |
+| **BOTTOM / ADC** | Daño a campeones / min (`750.0` DPM) | Oro por minuto (`500.0` GPM) |
+| **UTILITY / SUPPORT** | KDA agregado (`4.0`) | Puntuación de visión / min (`2.0` VSPM) |
 
 - **Normalización y cálculo de nota:**
   Cada factor se acota estrictamente al intervalo $[0, 1]$:
@@ -22,8 +22,8 @@
   La nota se mapea a la escala 1,0 a 7,0 mediante:
   $$\text{Nota} = 1.0 + 6.0 \times \left(\frac{N_1 + N_2}{2}\right)$$
 - **Umbral de cumplimiento de meta:**
-  - $\text{Nota} > 5.0$: `Logra la meta`
-  - $\text{Nota} \le 5.0$: `No logró la meta`
+  - $\text{Nota} > 5.5$: `Logra la meta`
+  - $\text{Nota} \le 5.5$: `No logró la meta`
   - Partidas $< 10$: `Muestra insuficiente` (no evalúa meta definitiva)
 
 ---
@@ -36,7 +36,7 @@
   - Partidas $\ge 10$ y Winrate $> 52.0\%$: `Destacado en la muestra`
   - Partidas $\ge 10$ y Winrate $\le 52.0\%$: `No supera el umbral`
   - Partidas $< 10$: `Muestra insuficiente` (evita declarar casos atípicos o especializados como dominantes).
-- **Aclaración sobre sesgo y alcance:** El indicador describe el meta observado en las partidas recolectadas para la cohorte analizada. No busca diagnosticar jugadores One-Trick Pony (OTP) ni representa el metajuego global de todo LAS.
+- **Aclaración sobre sesgo y alcance:** El indicador describe el meta observado en las partidas recolectadas para la cohorte analizada.
 
 ---
 
@@ -48,16 +48,16 @@ Al ejecutar la consulta sobre la base de datos PostgreSQL real, se obtienen las 
 
 | Rol | Partidas | KDA | DPM | GPM | Visión/min | Torres/min | Obj JG/partida | Nota (1–7) | Estado de Rendimiento |
 | :--- | :---:| :---:| :---:| :---:| :---:| :---:| :---:| :---:| :--- |
-| **MIDDLE** | 78 | 2,42 | 935,98 | 415,87 | 0,83 | 214,82 | 0,04 | **6,4** | `Logra la meta` |
-| **JUNGLE** | 16 | 2,19 | 833,34 | 450,76 | 0,92 | 115,91 | 2,88 | **6,2** | `Logra la meta` |
-| **BOTTOM** | 14 | 2,36 | 972,49 | 467,38 | 0,90 | 198,49 | 0,36 | **7,0** | `Logra la meta` |
+| **MIDDLE** | 78 | 2,42 | 935,98 | 415,87 | 0,83 | 214,82 | 0,04 | **5,6** | `Logra la meta` |
+| **JUNGLE** | 16 | 2,19 | 833,34 | 450,76 | 0,92 | 115,91 | 2,88 | **5,3** | `No logró la meta` |
+| **BOTTOM** | 14 | 2,36 | 972,49 | 467,38 | 0,90 | 198,49 | 0,36 | **6,8** | `Logra la meta` |
 | **UTILITY** | 6 | 5,83 | 439,52 | 328,26 | 2,70 | 66,63 | 0,17 | **7,0** | `Logra la meta` |
-| **TOP** | 2 | 0,00 | 588,67 | 324,36 | 0,74 | 81,61 | 0,00 | **5,6** | `Logra la meta` |
+| **TOP** | 2 | 0,00 | 588,67 | 324,36 | 0,74 | 81,61 | 0,00 | **4,9** | `No logró la meta` |
 
 **Hallazgos de gestión:**
-* `Frikz#xoro` es predominantemente jugador de carril central (`MIDDLE` con 78 partidas). Su daño promedio es altísimo (935,98 DPM vs referencia 600), lo que satura su factor ofensivo al máximo (1,0) y compensa su KDA de 2,42, alcanzando una nota destacada de 6,4.
-* En `JUNGLE` (16 partidas), supera la referencia de objetivos neutrales individuales con 2,88 dragones/barones por partida frente a la referencia de 2,0.
-* Las participaciones en `UTILITY` (6) y `TOP` (2) presentan notas elevadas, pero al contar con menos de 10 partidas se interpretan con cautela en el informe final.
+* `Frikz#xoro` es predominantemente jugador de carril central (`MIDDLE` con 78 partidas). Su daño promedio es altísimo (935,98 DPM vs referencia 600), lo que satura su factor ofensivo al máximo (1,0) y compensa su KDA de 2,42, alcanzando una nota de 5,6.
+* En `JUNGLE` (16 partidas), no supera la referencia de objetivos neutrales individuales con 2,88 dragones/barones por partida frente a la referencia de 3,0.
+* Las participaciones en `UTILITY` (6) y `TOP` (2) presentan notas elevadas, pero al contar con menos de 10 partidas se interpretan con cautela.
 
 ---
 
@@ -67,14 +67,14 @@ En la muestra consolidada (4.819 combinaciones de campeón/rol/parche), 29 combi
 
 | Campeón | Rol | Parche | Partidas Totales | Winrate Global | KDA Global | Clasificación Tier |
 | :--- | :--- | :--- | :---:| :---:| :---:| :--- |
-| **Soraka** | UTILITY | 15.15.701.6241 | 10 | **90,00%** | 3,65 | `Destacado en la muestra` |
-| **Soraka** | UTILITY | 15.14.697.2104 | 17 | **88,24%** | 5,37 | `Destacado en la muestra` |
-| **Caitlyn** | BOTTOM | 16.18.817.5716 | 16 | **75,00%** | 3,62 | `Destacado en la muestra` |
-| **Nami** | UTILITY | 16.7.760.9485 | 11 | **72,73%** | 7,66 | `Destacado en la muestra` |
-| **Lulu** | UTILITY | 16.19.823.722 | 11 | **72,73%** | 7,50 | `Destacado en la muestra` |
-| **Lulu** | UTILITY | 16.7.760.9485 | 14 | **71,43%** | 7,70 | `Destacado en la muestra` |
-| **Tristana** | BOTTOM | 16.17.810.4348 | 10 | **70,00%** | 3,55 | `Destacado en la muestra` |
-| **LeeSin** | JUNGLE | 16.18.817.5716 | 16 | **68,75%** | 6,83 | `Destacado en la muestra` |
+| **Soraka** | UTILITY | 15.15 | 10 | **90,00%** | 3,65 | `Destacado en la muestra` |
+| **Soraka** | UTILITY | 15.14 | 17 | **88,24%** | 5,37 | `Destacado en la muestra` |
+| **Caitlyn** | BOTTOM | 16.18 | 16 | **75,00%** | 3,62 | `Destacado en la muestra` |
+| **Nami** | UTILITY | 16.7 | 11 | **72,73%** | 7,66 | `Destacado en la muestra` |
+| **Lulu** | UTILITY | 16.19 | 11 | **72,73%** | 7,50 | `Destacado en la muestra` |
+| **Lulu** | UTILITY | 16.7 | 14 | **71,43%** | 7,70 | `Destacado en la muestra` |
+| **Tristana** | BOTTOM | 16.17 | 10 | **70,00%** | 3,55 | `Destacado en la muestra` |
+| **LeeSin** | JUNGLE | 16.18 | 16 | **68,75%** | 6,83 | `Destacado en la muestra` |
 
 Ejemplos de campeones con muestra suficiente que **no superan el umbral** (≤ 52%):
 * **Lulu** (UTILITY, parche 16.18): 26 partidas, 38,46% winrate, KDA 5,07 → `No supera el umbral`.
