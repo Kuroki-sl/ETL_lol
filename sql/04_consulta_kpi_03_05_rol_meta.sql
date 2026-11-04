@@ -4,15 +4,15 @@
 -- ============================================================================
 -- 1. CONSULTA KPI 3: Calificación de desempeño por rol (Escala 1,0 a 7,0)
 -- ============================================================================
--- Evalúa las métricas clave de cada rol normalizadas frente a las referencias
--- acordadas por el equipo para el proyecto:
---   * TOP:     Daño/min (ref: 500) y Daño a torres/min (ref: 150)
---   * JUNGLE:  KDA agregado (ref: 3.0) y Dragones+Barones por partida (ref: 2.0)
---   * MIDDLE:  KDA agregado (ref: 3.0) y Daño/min (ref: 600)
---   * BOTTOM:  Daño/min (ref: 650) y Oro/min (ref: 450)
---   * UTILITY: KDA agregado (ref: 3.0) y Visión/min (ref: 1.5)
+-- Evalúa las métricas clave de cada rol normalizadas frente a los umbrales
+-- definitivos de ALTA EXIGENCIA acordados por el equipo para el proyecto:
+--   * TOP:     Daño/min (650) y Daño a torres/min (200)
+--   * JUNGLE:  KDA agregado (4.5) y Dragones+Barones por partida (3.0)
+--   * MIDDLE:  KDA agregado (4.5) y Daño/min (700)
+--   * BOTTOM:  Daño/min (750) y Oro/min (500)
+--   * UTILITY: KDA agregado (4.0) y Visión/min (2.0)
 -- Fórmula: Nota = 1.0 + 6.0 * ((Factor_1 + Factor_2) / 2.0), acotados en [0, 1].
--- Meta: Nota > 5.0 clasifica como 'Logra la meta'.
+-- Meta: Nota >= 5.5 clasifica como 'Logra la meta'.
 
 WITH parametros AS (
     SELECT 
@@ -33,11 +33,11 @@ SELECT
     k.nota_escala_1_a_7,
     k.estado_rendimiento,
     CASE k.rol
-        WHEN 'TOP' THEN 'Factores: DPM (' || COALESCE(k.dpm_promedio::TEXT, '0') || '/500) y Torres/min (' || COALESCE(k.torres_min_promedio::TEXT, '0') || '/150)'
-        WHEN 'JUNGLE' THEN 'Factores: KDA (' || COALESCE(k.kda_promedio::TEXT, '0') || '/3.0) y Obj JG/partida (' || COALESCE(k.objetivos_jg_promedio::TEXT, '0') || '/2.0)'
-        WHEN 'MIDDLE' THEN 'Factores: KDA (' || COALESCE(k.kda_promedio::TEXT, '0') || '/3.0) y DPM (' || COALESCE(k.dpm_promedio::TEXT, '0') || '/600)'
-        WHEN 'BOTTOM' THEN 'Factores: DPM (' || COALESCE(k.dpm_promedio::TEXT, '0') || '/650) y GPM (' || COALESCE(k.gpm_promedio::TEXT, '0') || '/450)'
-        WHEN 'UTILITY' THEN 'Factores: KDA (' || COALESCE(k.kda_promedio::TEXT, '0') || '/3.0) y Visión/min (' || COALESCE(k.vision_min_promedio::TEXT, '0') || '/1.5)'
+        WHEN 'TOP' THEN 'Factores definitivos: DPM (' || COALESCE(k.dpm_promedio::TEXT, '0') || '/650) y Torres/min (' || COALESCE(k.torres_min_promedio::TEXT, '0') || '/200)'
+        WHEN 'JUNGLE' THEN 'Factores definitivos: KDA (' || COALESCE(k.kda_promedio::TEXT, '0') || '/4.5) y Obj JG/partida (' || COALESCE(k.objetivos_jg_promedio::TEXT, '0') || '/3.0)'
+        WHEN 'MIDDLE' THEN 'Factores definitivos: KDA (' || COALESCE(k.kda_promedio::TEXT, '0') || '/4.5) y DPM (' || COALESCE(k.dpm_promedio::TEXT, '0') || '/700)'
+        WHEN 'BOTTOM' THEN 'Factores definitivos: DPM (' || COALESCE(k.dpm_promedio::TEXT, '0') || '/750) y GPM (' || COALESCE(k.gpm_promedio::TEXT, '0') || '/500)'
+        WHEN 'UTILITY' THEN 'Factores definitivos: KDA (' || COALESCE(k.kda_promedio::TEXT, '0') || '/4.0) y Visión/min (' || COALESCE(k.vision_min_promedio::TEXT, '0') || '/2.0)'
         ELSE 'Rol genérico'
     END AS detalle_evaluacion
 FROM mart.kpi_03_calificacion_rol k
@@ -48,8 +48,8 @@ WHERE (
 )
   AND (p.rol_opcional IS NULL OR UPPER(k.rol) = p.rol_opcional)
 ORDER BY
-    k.partidas_jugadas DESC,
-    k.nota_escala_1_a_7 DESC;
+    k.nota_escala_1_a_7 DESC,
+    k.partidas_jugadas DESC;
 
 
 -- ============================================================================
@@ -63,7 +63,7 @@ ORDER BY
 
 WITH parametros AS (
     SELECT 
-        NULLIF(BTRIM(''::TEXT), '') AS parche_opcional,       -- Ej: '16.18' o '16.18.817.5716' o dejar vacío
+        NULLIF(BTRIM(''::TEXT), '') AS parche_opcional,       -- Ej: '16.18' o dejar vacío
         NULLIF(UPPER(BTRIM(''::TEXT)), '') AS rol_opcional   -- Ej: 'BOTTOM', 'UTILITY', o vacío
 )
 SELECT
@@ -132,7 +132,7 @@ LIMIT 10;
 -- Comprueba que cada fila de fact_partidas corresponde a una participación
 -- individual y no genera duplicados en la suma de partidas_totales del meta.
 SELECT 
-    f.parche,
+    SPLIT_PART(f.parche, '.', 1) || '.' || SPLIT_PART(f.parche, '.', 2) AS parche_principal,
     f.campeon,
     f.rol,
     COUNT(DISTINCT f.match_id) AS partidas_distintas,
@@ -143,5 +143,8 @@ FROM dw.fact_partidas f
 WHERE f.queue_id = 420
   AND f.parche LIKE '16.18%'
   AND f.campeon IN ('Caitlyn', 'LeeSin', 'Lulu')
-GROUP BY f.parche, f.campeon, f.rol
+GROUP BY 
+    SPLIT_PART(f.parche, '.', 1) || '.' || SPLIT_PART(f.parche, '.', 2), 
+    f.campeon, 
+    f.rol
 ORDER BY participaciones_totales DESC;
